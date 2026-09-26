@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package api.payments.v1;
+
+option go_package = "omnibus-deposit-network/services/payments-svc/api/payments/v1;paymentsv1";
+
+import "google/api/annotations.proto";
+import "api/payments/v1/common.proto";
+
+// PaymentService is the corporate client's payment channel: create payment
+// orders (singly, or as an ISO 20022 pain.001 file), approve them under
+// maker-checker, follow their pain.002 status, and check a payee first.
+//
+// CreatePayment and SubmitPaymentFile require an Idempotency-Key header
+// (gRPC metadata idempotency-key): a retry with the same key and body
+// returns the original result; the same key with a different body is 422.
+service PaymentService {
+  // CreatePayment records a payment order from a maker.
+  rpc CreatePayment(CreatePaymentRequest) returns (CreatePaymentResponse) {
+    option (google.api.http) = { post: "/v1/payments" body: "*" };
+  }
+
+  // GetPayment returns one payment with its audit trail.
+  rpc GetPayment(GetPaymentRequest) returns (Payment) {
+    option (google.api.http) = { get: "/v1/payments/{id}" };
+  }
+
+  // ListPayments lists the caller's organization's payments, newest first.
+  rpc ListPayments(ListPaymentsRequest) returns (ListPaymentsResponse) {
+    option (google.api.http) = { get: "/v1/payments" };
+  }
+
+  // ApprovePayment records an approval. The maker can never approve its own
+  // payment; each approver counts once.
+  rpc ApprovePayment(ApprovePaymentRequest) returns (Payment) {
+    option (google.api.http) = { post: "/v1/payments/{id}/approve" body: "*" };
+  }
+
+  // DeclinePayment is an approver refusing a payment.
+  rpc DeclinePayment(DeclinePaymentRequest) returns (Payment) {
+    option (google.api.http) = { post: "/v1/payments/{id}/decline" body: "*" };
+  }
+
+  // CancelPayment withdraws a payment not yet approved (its maker), or pulls
+  // a NORMAL payment from the netting queue before its cycle runs.
+  rpc CancelPayment(CancelPaymentRequest) returns (Payment) {
+    option (google.api.http) = { post: "/v1/payments/{id}/cancel" body: "*" };
+  }
+
+  // GetPaymentStatusReport renders the payment's status as a pain.002.001.11.
+  rpc GetPaymentStatusReport(GetPaymentRequest) returns (Document) {
+    option (google.api.http) = { get: "/v1/payments/{id}/pain002" };
+  }
+
+  // SubmitPaymentFile accepts a pain.001.001.10 customer credit transfer
+  // initiation. Each transaction becomes a payment awaiting approval; the
+  // answer carries the file-level pain.002.
+  rpc SubmitPaymentFile(SubmitPaymentFileRequest) returns (PaymentFile) {
+    option (google.api.http) = { post: "/v1/payment-files" body: "*" };
+  }
+
+  // GetPaymentFileStatusReport renders a file's current pain.002.001.11.
+  rpc GetPaymentFileStatusReport(GetPaymentFileRequest) returns (Document) {
+    option (google.api.http) = { get: "/v1/payment-files/{id}/pain002" };
+  }
+
+  // VerifyPayee asks the receiving bank whether an account is open and the
+  // name matches its records.
+  rpc VerifyPayee(Party) returns (PayeeCheck) {
+    option (google.api.http) = { post: "/v1/payees/verify" body: "*" };
+  }
+
+  // ListParticipants lists the banks on the network and whether each is live.
+  rpc ListParticipants(ListParticipantsRequest) returns (ListParticipantsResponse) {
+    option (google.api.http) = { get: "/v1/network/participants" };
+  }
+}
+
+message CreatePaymentRequest {
+  string debtor_account = 1; // defaults to the organization's account
+  Party creditor = 2;
+  Money amount = 3;
+  string priority = 4;       // URGENT | NORMAL (default NORMAL)
+  string remittance = 5;
+  string end_to_end_id = 6;  // at most 35 characters; defaults to the payment id
+}
+
+message CreatePaymentResponse {
+  Payment payment = 1;
+  // True when the Idempotency-Key matched an earlier request with the same
+  // body: nothing new was created.
+  bool duplicate_request = 2;
+}
+
+message GetPaymentRequest {
+  string id = 1;
+}
+
+message ListPaymentsRequest {
+  string status = 1;
+  int32 page_size = 2;   // default 50, maximum 100
+  string page_token = 3;
+}
+
+message ListPaymentsResponse {
+  repeated Payment payments = 1;
+  string next_page_token = 2;
+}
+
+message ApprovePaymentRequest {
+  string id = 1;
+}
+
+message DeclinePaymentRequest {
+  string id = 1;
+  string reason = 2;
+}
+
+message CancelPaymentRequest {
+  string id = 1;
+}
+
+message SubmitPaymentFileRequest {
+  string xml = 1; // the pain.001.001.10 document
+}
+
+message PaymentFile {
+  string id = 1;
+  string message_id = 2;
+  int32 number_of_transactions = 3;
+  Money control_sum = 4;
+  repeated Payment payments = 5;
+  // Transactions refused at validation, by end-to-end id, with a reason.
+  repeated FileRejection rejections = 6;
+  Document status_report = 7; // pain.002.001.11
+  bool duplicate_request = 8;
+}
+
+message FileRejection {
+  string end_to_end_id = 1;
+  string reason_code = 2;
+  string message = 3;
+}
+
+message GetPaymentFileRequest {
+  string id = 1;
+}
+
+message ListParticipantsRequest {}
+
+message Participant {
+  string name = 1;
+  string routing_number = 2;
+  string member_id = 3;
+  string status = 4;                 // LIVE | SUSPENDED
+  bool instant_24x7 = 5;
+  bool receiver_screens_inbound = 6;
+}
+
+message ListParticipantsResponse {
+  repeated Participant participants = 1;
+}

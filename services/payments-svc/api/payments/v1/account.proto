@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package api.payments.v1;
+
+option go_package = "omnibus-deposit-network/services/payments-svc/api/payments/v1;paymentsv1";
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "api/payments/v1/common.proto";
+
+// AccountService is the corporate client's view of its deposit account.
+service AccountService {
+  // WhoAmI returns the authenticated person and entitlements.
+  rpc WhoAmI(WhoAmIRequest) returns (Principal) {
+    option (google.api.http) = { get: "/v1/me" };
+  }
+
+  // GetAccount returns the organization's deposit account.
+  rpc GetAccount(GetAccountRequest) returns (Account) {
+    option (google.api.http) = { get: "/v1/account" };
+  }
+
+  // ListStatementEntries returns the account's postings.
+  rpc ListStatementEntries(ListStatementEntriesRequest) returns (ListStatementEntriesResponse) {
+    option (google.api.http) = { get: "/v1/account/statement" };
+  }
+
+  // GetStatement renders the account statement as a camt.053.001.08.
+  rpc GetStatement(GetAccountRequest) returns (Document) {
+    option (google.api.http) = { get: "/v1/account/statement/camt053" };
+  }
+}
+
+message WhoAmIRequest {}
+
+message Principal {
+  string id = 1;
+  string name = 2;
+  // maker | approver | viewer | compliance | treasury | treasury-approver | operator-ops
+  string role = 3;
+  string bank_id = 4;
+  string organization_id = 5;
+}
+
+message GetAccountRequest {}
+
+message Account {
+  string organization_id = 1;
+  string organization_name = 2;
+  string account = 3;
+  string bank_id = 4;
+  string bank_name = 5;
+  string routing_number = 6;
+  Money balance = 7;
+  Money in_flight = 8; // debited for payments not yet settled
+  google.protobuf.Timestamp as_of = 9;
+}
+
+message ListStatementEntriesRequest {}
+
+message StatementEntry {
+  google.protobuf.Timestamp booking_date = 1;
+  string reference = 2;
+  bool credit = 3;
+  Money amount = 4;
+  Money balance = 5;
+}
+
+message ListStatementEntriesResponse {
+  repeated StatementEntry entries = 1;
+}

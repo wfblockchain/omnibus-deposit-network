@@ -1,0 +1,1282 @@
+# Generated with protoc-gen-openapi
+# https://github.com/google/gnostic/tree/master/cmd/protoc-gen-openapi
+
+openapi: 3.0.3
+info:
+    title: Omnibus network payment hub API
+    version: 1.0.0
+paths:
+    /v1/account:
+        get:
+            tags:
+                - AccountService
+            description: GetAccount returns the organization's deposit account.
+            operationId: AccountService_GetAccount
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Account'
+    /v1/account/statement:
+        get:
+            tags:
+                - AccountService
+            description: ListStatementEntries returns the account's postings.
+            operationId: AccountService_ListStatementEntries
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.ListStatementEntriesResponse'
+    /v1/account/statement/camt053:
+        get:
+            tags:
+                - AccountService
+            description: GetStatement renders the account statement as a camt.053.001.08.
+            operationId: AccountService_GetStatement
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Document'
+    /v1/me:
+        get:
+            tags:
+                - AccountService
+            description: WhoAmI returns the authenticated person and entitlements.
+            operationId: AccountService_WhoAmI
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Principal'
+    /v1/network/participants:
+        get:
+            tags:
+                - PaymentService
+            description: ListParticipants lists the banks on the network and whether each is live.
+            operationId: PaymentService_ListParticipants
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.ListParticipantsResponse'
+    /v1/operator/clock:
+        post:
+            tags:
+                - NetworkOperationsService
+            description: |-
+                SetClock moves the scenario clock (and the chain's) forward. Demo builds
+                 only; a production build answers PERMISSION_DENIED.
+            operationId: NetworkOperationsService_SetClock
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.SetClockRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.SetClockResponse'
+    /v1/operator/netting-cycles:
+        post:
+            tags:
+                - NetworkOperationsService
+            description: RunNettingCycle plans and settles a netting cycle now.
+            operationId: NetworkOperationsService_RunNettingCycle
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.RunNettingCycleRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.NettingCycle'
+    /v1/operator/network:
+        get:
+            tags:
+                - NetworkOperationsService
+            description: |-
+                GetNetwork returns members, the Fed joint account, cycles and
+                 reconciliations.
+            operationId: NetworkOperationsService_GetNetwork
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Network'
+    /v1/operator/reconciliations:
+        post:
+            tags:
+                - NetworkOperationsService
+            description: Reconcile attests the Fed's camt.052 balance for the joint account.
+            operationId: NetworkOperationsService_Reconcile
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.ReconcileRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Reconciliation'
+    /v1/ops/defunds:
+        post:
+            tags:
+                - BankOperationsService
+            description: RequestDefund asks for free position back to the master account (maker).
+            operationId: BankOperationsService_RequestDefund
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.RequestDefundRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Defund'
+    /v1/ops/defunds/{id}/approve:
+        post:
+            tags:
+                - BankOperationsService
+            description: ApproveDefund is the checker; never the requester, always the same bank.
+            operationId: BankOperationsService_ApproveDefund
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.ApproveDefundRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Defund'
+    /v1/ops/funding:
+        post:
+            tags:
+                - BankOperationsService
+            description: |-
+                FundOmnibus sends reserves into the joint account: Fedwire BTRC while
+                 Fedwire is open, FedNow LMT1 while it is closed.
+            operationId: BankOperationsService_FundOmnibus
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.FundOmnibusRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.FundOmnibusResponse'
+    /v1/ops/holds:
+        get:
+            tags:
+                - BankOperationsService
+            description: |-
+                ListHolds lists payments held for sanctions review, and blocked or
+                 rejected cases with their OFAC report dates.
+            operationId: BankOperationsService_ListHolds
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.ListHoldsResponse'
+    /v1/ops/holds/{id}/block:
+        post:
+            tags:
+                - BankOperationsService
+            description: |-
+                BlockHold: a sanctioned party has an interest in the funds. They move to
+                 the bank's blocked account (BLCK) and a report is due to OFAC within 10
+                 business days (31 CFR 501.603).
+            operationId: BankOperationsService_BlockHold
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.HoldDecisionRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Payment'
+    /v1/ops/holds/{id}/reject:
+        post:
+            tags:
+                - BankOperationsService
+            description: |-
+                RejectHold: prohibited, but no sanctioned party has an interest. Nothing
+                 moves (RR04); reported within 10 business days (31 CFR 501.604).
+            operationId: BankOperationsService_RejectHold
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.HoldDecisionRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Payment'
+    /v1/ops/holds/{id}/release:
+        post:
+            tags:
+                - BankOperationsService
+            description: ReleaseHold clears a false positive; the payment proceeds.
+            operationId: BankOperationsService_ReleaseHold
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.HoldDecisionRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Payment'
+    /v1/ops/liquidity:
+        get:
+            tags:
+                - BankOperationsService
+            description: |-
+                GetLiquidity returns the bank's omnibus position, capacity, alerts,
+                 payments waiting for liquidity and defunds.
+            operationId: BankOperationsService_GetLiquidity
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Liquidity'
+    /v1/ops/payments:
+        get:
+            tags:
+                - BankOperationsService
+            description: ListBankPayments lists the bank's clients' payments, with staff detail.
+            operationId: BankOperationsService_ListBankPayments
+            parameters:
+                - name: status
+                  in: query
+                  schema:
+                    type: string
+                - name: pageSize
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: pageToken
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.ListBankPaymentsResponse'
+    /v1/ops/payments/{id}:
+        get:
+            tags:
+                - BankOperationsService
+            description: GetBankPayment returns one of the bank's clients' payments, with staff detail.
+            operationId: BankOperationsService_GetBankPayment
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Payment'
+    /v1/payees/verify:
+        post:
+            tags:
+                - PaymentService
+            description: |-
+                VerifyPayee asks the receiving bank whether an account is open and the
+                 name matches its records.
+            operationId: PaymentService_VerifyPayee
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.Party'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.PayeeCheck'
+    /v1/payment-files:
+        post:
+            tags:
+                - PaymentService
+            description: |-
+                SubmitPaymentFile accepts a pain.001.001.10 customer credit transfer
+                 initiation. Each transaction becomes a payment awaiting approval; the
+                 answer carries the file-level pain.002.
+            operationId: PaymentService_SubmitPaymentFile
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.SubmitPaymentFileRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.PaymentFile'
+    /v1/payment-files/{id}/pain002:
+        get:
+            tags:
+                - PaymentService
+            description: GetPaymentFileStatusReport renders a file's current pain.002.001.11.
+            operationId: PaymentService_GetPaymentFileStatusReport
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Document'
+    /v1/payments:
+        get:
+            tags:
+                - PaymentService
+            description: ListPayments lists the caller's organization's payments, newest first.
+            operationId: PaymentService_ListPayments
+            parameters:
+                - name: status
+                  in: query
+                  schema:
+                    type: string
+                - name: pageSize
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: pageToken
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.ListPaymentsResponse'
+        post:
+            tags:
+                - PaymentService
+            description: CreatePayment records a payment order from a maker.
+            operationId: PaymentService_CreatePayment
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.CreatePaymentRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.CreatePaymentResponse'
+    /v1/payments/{id}:
+        get:
+            tags:
+                - PaymentService
+            description: GetPayment returns one payment with its audit trail.
+            operationId: PaymentService_GetPayment
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Payment'
+    /v1/payments/{id}/approve:
+        post:
+            tags:
+                - PaymentService
+            description: |-
+                ApprovePayment records an approval. The maker can never approve its own
+                 payment; each approver counts once.
+            operationId: PaymentService_ApprovePayment
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.ApprovePaymentRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Payment'
+    /v1/payments/{id}/cancel:
+        post:
+            tags:
+                - PaymentService
+            description: |-
+                CancelPayment withdraws a payment not yet approved (its maker), or pulls
+                 a NORMAL payment from the netting queue before its cycle runs.
+            operationId: PaymentService_CancelPayment
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.CancelPaymentRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Payment'
+    /v1/payments/{id}/decline:
+        post:
+            tags:
+                - PaymentService
+            description: DeclinePayment is an approver refusing a payment.
+            operationId: PaymentService_DeclinePayment
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.DeclinePaymentRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Payment'
+    /v1/payments/{id}/pain002:
+        get:
+            tags:
+                - PaymentService
+            description: GetPaymentStatusReport renders the payment's status as a pain.002.001.11.
+            operationId: PaymentService_GetPaymentStatusReport
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Document'
+    /v1/webhooks:
+        get:
+            tags:
+                - WebhookService
+            description: ListWebhooks lists the organization's endpoints, without secrets.
+            operationId: WebhookService_ListWebhooks
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.ListWebhooksResponse'
+        post:
+            tags:
+                - WebhookService
+            description: CreateWebhook registers an https endpoint; the secret is returned once.
+            operationId: WebhookService_CreateWebhook
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/api.payments.v1.CreateWebhookRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.Webhook'
+    /v1/webhooks/{id}:
+        delete:
+            tags:
+                - WebhookService
+            description: DeleteWebhook removes an endpoint; its pending deliveries are dropped.
+            operationId: WebhookService_DeleteWebhook
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.DeleteWebhookResponse'
+    /v1/webhooks/{id}/deliveries:
+        get:
+            tags:
+                - WebhookService
+            description: ListWebhookDeliveries is an endpoint's delivery log.
+            operationId: WebhookService_ListWebhookDeliveries
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/api.payments.v1.ListWebhookDeliveriesResponse'
+components:
+    schemas:
+        api.payments.v1.Account:
+            type: object
+            properties:
+                organizationId:
+                    type: string
+                organizationName:
+                    type: string
+                account:
+                    type: string
+                bankId:
+                    type: string
+                bankName:
+                    type: string
+                routingNumber:
+                    type: string
+                balance:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                inFlight:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                asOf:
+                    type: string
+                    format: date-time
+        api.payments.v1.Alert:
+            type: object
+            properties:
+                id:
+                    type: string
+                kind:
+                    type: string
+                message:
+                    type: string
+                open:
+                    type: boolean
+                at:
+                    type: string
+                    format: date-time
+        api.payments.v1.ApproveDefundRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+        api.payments.v1.ApprovePaymentRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+        api.payments.v1.CancelPaymentRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+        api.payments.v1.CreatePaymentRequest:
+            type: object
+            properties:
+                debtorAccount:
+                    type: string
+                creditor:
+                    $ref: '#/components/schemas/api.payments.v1.Party'
+                amount:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                priority:
+                    type: string
+                remittance:
+                    type: string
+                endToEndId:
+                    type: string
+        api.payments.v1.CreatePaymentResponse:
+            type: object
+            properties:
+                payment:
+                    $ref: '#/components/schemas/api.payments.v1.Payment'
+                duplicateRequest:
+                    type: boolean
+                    description: |-
+                        True when the Idempotency-Key matched an earlier request with the same
+                         body: nothing new was created.
+        api.payments.v1.CreateWebhookRequest:
+            type: object
+            properties:
+                url:
+                    type: string
+        api.payments.v1.DeclinePaymentRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                reason:
+                    type: string
+        api.payments.v1.Defund:
+            type: object
+            properties:
+                id:
+                    type: string
+                amount:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                requestedBy:
+                    type: string
+                approvedBy:
+                    type: string
+                status:
+                    type: string
+                createdAt:
+                    type: string
+                    format: date-time
+        api.payments.v1.DeleteWebhookResponse:
+            type: object
+            properties: {}
+        api.payments.v1.Document:
+            type: object
+            properties:
+                messageType:
+                    type: string
+                xml:
+                    type: string
+            description: Document is an ISO 20022 message rendered as XML.
+        api.payments.v1.FileRejection:
+            type: object
+            properties:
+                endToEndId:
+                    type: string
+                reasonCode:
+                    type: string
+                message:
+                    type: string
+        api.payments.v1.FundOmnibusRequest:
+            type: object
+            properties:
+                amount:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+        api.payments.v1.FundOmnibusResponse:
+            type: object
+            properties:
+                instrument:
+                    type: string
+                status:
+                    type: string
+                reason:
+                    type: string
+                paymentsReleased:
+                    type: integer
+                    format: int32
+        api.payments.v1.HoldDecisionRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                note:
+                    type: string
+        api.payments.v1.Liquidity:
+            type: object
+            properties:
+                bankId:
+                    type: string
+                bankName:
+                    type: string
+                ticker:
+                    type: string
+                position:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                backing:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                pendingDefund:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                free:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                mintCapacity:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                lowWatermark:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                normalWatermark:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                fedwireOpen:
+                    type: boolean
+                nextFedwireOpen:
+                    type: string
+                    format: date-time
+                fundingInstrument:
+                    type: string
+                awaitingLiquidity:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.Payment'
+                alerts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.Alert'
+                defunds:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.Defund'
+        api.payments.v1.ListBankPaymentsResponse:
+            type: object
+            properties:
+                payments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.Payment'
+                nextPageToken:
+                    type: string
+        api.payments.v1.ListHoldsResponse:
+            type: object
+            properties:
+                holds:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.Payment'
+                cases:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.Payment'
+        api.payments.v1.ListParticipantsResponse:
+            type: object
+            properties:
+                participants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.Participant'
+        api.payments.v1.ListPaymentsResponse:
+            type: object
+            properties:
+                payments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.Payment'
+                nextPageToken:
+                    type: string
+        api.payments.v1.ListStatementEntriesResponse:
+            type: object
+            properties:
+                entries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.StatementEntry'
+        api.payments.v1.ListWebhookDeliveriesResponse:
+            type: object
+            properties:
+                deliveries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.WebhookDelivery'
+        api.payments.v1.ListWebhooksResponse:
+            type: object
+            properties:
+                webhooks:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.Webhook'
+        api.payments.v1.Member:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                ticker:
+                    type: string
+                position:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                backing:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                free:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+        api.payments.v1.Money:
+            type: object
+            properties:
+                amount:
+                    type: string
+                currency:
+                    type: string
+            description: |-
+                Money is an amount in a currency. The amount is a decimal string with at
+                 most two fraction digits ("25000000.00"), never a float.
+        api.payments.v1.NettingCycle:
+            type: object
+            properties:
+                id:
+                    type: string
+                cycleRef:
+                    type: string
+                at:
+                    type: string
+                    format: date-time
+                trigger:
+                    type: string
+                discharged:
+                    type: integer
+                    format: int32
+                deferred:
+                    type: integer
+                    format: int32
+                gross:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                net:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+        api.payments.v1.Network:
+            type: object
+            properties:
+                now:
+                    type: string
+                    format: date-time
+                fedwireOpen:
+                    type: boolean
+                nextFedwireOpen:
+                    type: string
+                    format: date-time
+                fedJointAccount:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                ledgerTotal:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                reconciliationBreak:
+                    type: boolean
+                invariantsHold:
+                    type: boolean
+                members:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.Member'
+                obligationsQueued:
+                    type: integer
+                    format: int32
+                nextScheduledCycle:
+                    type: string
+                    format: date-time
+                cycles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.NettingCycle'
+                reconciliations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.Reconciliation'
+        api.payments.v1.Participant:
+            type: object
+            properties:
+                name:
+                    type: string
+                routingNumber:
+                    type: string
+                memberId:
+                    type: string
+                status:
+                    type: string
+                instant24x7:
+                    type: boolean
+                receiverScreensInbound:
+                    type: boolean
+        api.payments.v1.Party:
+            type: object
+            properties:
+                name:
+                    type: string
+                routingNumber:
+                    type: string
+                account:
+                    type: string
+            description: Party identifies a payee by name, ABA routing number and account.
+        api.payments.v1.PayeeCheck:
+            type: object
+            properties:
+                accountStatus:
+                    type: string
+                nameMatch:
+                    type: string
+                registeredName:
+                    type: string
+            description: |-
+                PayeeCheck is the receiving bank's answer before any money moves, as the
+                 Fed's Payee Name Verification and banks' account-validation services give
+                 it.
+        api.payments.v1.Payment:
+            type: object
+            properties:
+                id:
+                    type: string
+                endToEndId:
+                    type: string
+                uetr:
+                    type: string
+                idempotencyKey:
+                    type: string
+                organizationId:
+                    type: string
+                debtorAccount:
+                    type: string
+                creditor:
+                    $ref: '#/components/schemas/api.payments.v1.Party'
+                amount:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                priority:
+                    type: string
+                remittance:
+                    type: string
+                status:
+                    type: string
+                    description: |-
+                        AWAITING_APPROVAL | IN_PROCESS | ON_HOLD | AWAITING_LIQUIDITY |
+                         PENDING_RECEIVER | QUEUED_FOR_NETTING | SETTLED | REJECTED | CANCELLED |
+                         EXPIRED | BLOCKED
+                isoStatus:
+                    type: string
+                    description: RCVD | ACTC | PATC | ACCP | PDNG | ACSP | ACSC | ACCC | RJCT | CANC | BLCK
+                reasonCode:
+                    type: string
+                route:
+                    type: string
+                    description: on-network instant, 24x7 | network netting cycle | book transfer, same bank
+                routeNote:
+                    type: string
+                payeeCheck:
+                    $ref: '#/components/schemas/api.payments.v1.PayeeCheck'
+                approvalsRequired:
+                    type: integer
+                    format: int32
+                approvals:
+                    type: array
+                    items:
+                        type: string
+                createdBy:
+                    type: string
+                createdAt:
+                    type: string
+                    format: date-time
+                settledAt:
+                    type: string
+                    format: date-time
+                ofacReportDue:
+                    type: string
+                    format: date-time
+                history:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.PaymentEvent'
+                fileId:
+                    type: string
+                sanctionsMatch:
+                    type: string
+            description: Payment is a payment order and its lifecycle.
+        api.payments.v1.PaymentEvent:
+            type: object
+            properties:
+                at:
+                    type: string
+                    format: date-time
+                actor:
+                    type: string
+                status:
+                    type: string
+                isoStatus:
+                    type: string
+                note:
+                    type: string
+                detail:
+                    type: string
+                    description: |-
+                        Detail is for bank and operator staff (tickers, positions, liquidity moves);
+                         it is never returned to a client organization.
+            description: PaymentEvent is one line of a payment's audit trail.
+        api.payments.v1.PaymentFile:
+            type: object
+            properties:
+                id:
+                    type: string
+                messageId:
+                    type: string
+                numberOfTransactions:
+                    type: integer
+                    format: int32
+                controlSum:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                payments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.Payment'
+                rejections:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/api.payments.v1.FileRejection'
+                    description: Transactions refused at validation, by end-to-end id, with a reason.
+                statusReport:
+                    $ref: '#/components/schemas/api.payments.v1.Document'
+                duplicateRequest:
+                    type: boolean
+        api.payments.v1.Principal:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                role:
+                    type: string
+                    description: maker | approver | viewer | compliance | treasury | treasury-approver | operator-ops
+                bankId:
+                    type: string
+                organizationId:
+                    type: string
+        api.payments.v1.ReconcileRequest:
+            type: object
+            properties: {}
+        api.payments.v1.Reconciliation:
+            type: object
+            properties:
+                id:
+                    type: string
+                at:
+                    type: string
+                    format: date-time
+                fedBalance:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                ledgerTotal:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                reconciliationBreak:
+                    type: boolean
+                invariantsHold:
+                    type: boolean
+        api.payments.v1.RequestDefundRequest:
+            type: object
+            properties:
+                amount:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+        api.payments.v1.RunNettingCycleRequest:
+            type: object
+            properties: {}
+        api.payments.v1.SetClockRequest:
+            type: object
+            properties:
+                time:
+                    type: string
+                    format: date-time
+        api.payments.v1.SetClockResponse:
+            type: object
+            properties:
+                now:
+                    type: string
+                    format: date-time
+        api.payments.v1.StatementEntry:
+            type: object
+            properties:
+                bookingDate:
+                    type: string
+                    format: date-time
+                reference:
+                    type: string
+                credit:
+                    type: boolean
+                amount:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+                balance:
+                    $ref: '#/components/schemas/api.payments.v1.Money'
+        api.payments.v1.SubmitPaymentFileRequest:
+            type: object
+            properties:
+                xml:
+                    type: string
+        api.payments.v1.Webhook:
+            type: object
+            properties:
+                id:
+                    type: string
+                url:
+                    type: string
+                secret:
+                    type: string
+                createdAt:
+                    type: string
+                    format: date-time
+        api.payments.v1.WebhookDelivery:
+            type: object
+            properties:
+                id:
+                    type: string
+                eventType:
+                    type: string
+                status:
+                    type: string
+                attempts:
+                    type: integer
+                    format: int32
+                lastResponseCode:
+                    type: integer
+                    format: int32
+                lastError:
+                    type: string
+                nextAttemptAt:
+                    type: string
+                    format: date-time
+                createdAt:
+                    type: string
+                    format: date-time
+tags:
+    - name: AccountService
+      description: AccountService is the corporate client's view of its deposit account.
+    - name: BankOperationsService
+      description: |-
+        BankOperationsService is a member bank's operations console: sanctions
+         review (compliance), the omnibus position and its funding (treasury), and
+         defunds under maker-checker.
+    - name: NetworkOperationsService
+      description: |-
+        NetworkOperationsService is the operator's console over the network: members'
+         positions, the Fed joint account against the ledger, netting cycles and
+         reconciliation.
+    - name: PaymentService
+      description: |-
+        PaymentService is the corporate client's payment channel: create payment
+         orders (singly, or as an ISO 20022 pain.001 file), approve them under
+         maker-checker, follow their pain.002 status, and check a payee first.
+
+         CreatePayment and SubmitPaymentFile require an Idempotency-Key header
+         (gRPC metadata idempotency-key): a retry with the same key and body
+         returns the original result; the same key with a different body is 422.
+    - name: WebhookService
+      description: |-
+        WebhookService manages an organization's payment status notifications.
+         Each status change of a payment is delivered as a CloudEvents 1.0 event,
+         signed per Standard Webhooks (webhook-id, webhook-timestamp,
+         webhook-signature: v1,<base64 HMAC-SHA256 of "id.timestamp.body">), at
+         least once and in order per endpoint, retried with backoff. Only the
+         organization's approvers manage endpoints.

@@ -1,0 +1,73 @@
+# payments-svc demo configuration. Values of the form ${NAME:default} come
+# from the environment. A production build refuses static tokens, SQLite,
+# loopback webhooks and the demo encryption key (cmd/payments-svc/main.go).
+server:
+  http:
+    addr: ${HTTP_ADDR:127.0.0.1:8090}
+    timeout: 60s
+  grpc:
+    addr: ${GRPC_ADDR:127.0.0.1:9090}
+    timeout: 60s
+
+data:
+  driver: ${DATABASE_DRIVER:sqlite}
+  source: ${DATABASE_URL:file:payments.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)}
+
+auth:
+  mode: static
+  static_users:
+    - { token: tok-nw-maker, id: nw-maker, name: "Priya Shah, AP specialist", role: maker, bank: BNKAUS30, organization: northwind }
+    - { token: tok-nw-treasurer, id: nw-treasurer, name: "Tom Reyes, Treasurer", role: approver, bank: BNKAUS30, organization: northwind }
+    - { token: tok-nw-cfo, id: nw-cfo, name: "Lena Ortiz, CFO", role: approver, bank: BNKAUS30, organization: northwind }
+    - { token: tok-nw-viewer, id: nw-viewer, name: "Sam Lee, Auditor", role: viewer, bank: BNKAUS30, organization: northwind }
+    - { token: tok-co-maker, id: co-maker, name: "Ari Cohen, AP specialist", role: maker, bank: BNKBUS30, organization: contoso }
+    - { token: tok-co-approver, id: co-approver, name: "Mei Tan, Treasurer", role: approver, bank: BNKBUS30, organization: contoso }
+    - { token: tok-fa-maker, id: fa-maker, name: "Luis Gomez, AP specialist", role: maker, bank: BNKCUS30, organization: fabrikam }
+    - { token: tok-fa-approver, id: fa-approver, name: "Nora Kim, Treasurer", role: approver, bank: BNKCUS30, organization: fabrikam }
+    - { token: tok-bank-a-compliance, id: bank-a-compliance, name: "Bank A sanctions review", role: compliance, bank: BNKAUS30 }
+    - { token: tok-bank-a-treasury, id: bank-a-treasury, name: "Bank A liquidity desk", role: treasury, bank: BNKAUS30 }
+    - { token: tok-bank-a-treasury-approver, id: bank-a-treasury-approver, name: "Bank A treasury approver", role: treasury-approver, bank: BNKAUS30 }
+    - { token: tok-bank-b-compliance, id: bank-b-compliance, name: "Bank B sanctions review", role: compliance, bank: BNKBUS30 }
+    - { token: tok-bank-b-treasury, id: bank-b-treasury, name: "Bank B liquidity desk", role: treasury, bank: BNKBUS30 }
+    - { token: tok-bank-b-treasury-approver, id: bank-b-treasury-approver, name: "Bank B treasury approver", role: treasury-approver, bank: BNKBUS30 }
+    - { token: tok-bank-c-treasury, id: bank-c-treasury, name: "Bank C liquidity desk", role: treasury, bank: BNKCUS30 }
+    - { token: tok-operator-ops, id: operator-ops, name: "the network operations", role: operator-ops }
+
+# The rails: a local anvil (started when rpc_url is empty), the contracts
+# built by Foundry, and the Fed simulator. The scenario clock starts on
+# Friday 2 October 2026 at 16:00 ET, three hours before Fedwire closes.
+network:
+  rpc_url: ${RPC_URL:}
+  anvil_bin: ${ANVIL_BIN:anvil}
+  artifacts: ${CONTRACT_ARTIFACTS:../../contracts/out}
+  start_time: "2026-10-02T16:00:00-04:00"
+  banks:
+    - { member_id: BNKAUS30, name: Bank A, ticker: A-dT, routing_number: "123456780", initial_funding: "20000000", low_watermark: "5000000", normal_watermark: "10000000" }
+    - { member_id: BNKBUS30, name: Bank B, ticker: B-dT, routing_number: "234567898", requires_acceptance: true, initial_funding: "40000000", low_watermark: "5000000", normal_watermark: "10000000" }
+    - { member_id: BNKCUS30, name: Bank C, ticker: C-dT, routing_number: "012345672", initial_funding: "30000000", low_watermark: "5000000", normal_watermark: "10000000" }
+  accounts:
+    - { bank: BNKAUS30, account: A-3000001, name: Northwind Corp, opening: "150000000" }
+    - { bank: BNKBUS30, account: B-4000001, name: Contoso Ltd, opening: "80000000" }
+    - { bank: BNKCUS30, account: C-5000001, name: Fabrikam Inc, opening: "70000000" }
+    - { bank: BNKBUS30, account: B-2000002, name: Dave Ltd, closed: true }
+
+organizations:
+  - { id: northwind, name: Northwind Corp, bank: BNKAUS30, account: A-3000001, per_payment_limit: "50000000", daily_limit: "100000000", second_approval_above: "10000000" }
+  - { id: contoso, name: Contoso Ltd, bank: BNKBUS30, account: B-4000001, per_payment_limit: "50000000", daily_limit: "100000000", second_approval_above: "25000000" }
+  - { id: fabrikam, name: Fabrikam Inc, bank: BNKCUS30, account: C-5000001, per_payment_limit: "50000000", daily_limit: "100000000", second_approval_above: "25000000" }
+
+# OFAC SDN list: the Treasury's CSVs in ofac_dir (make ofac-data), fetched
+# from treasury.gov at start-up when missing and download is on.
+sanctions:
+  ofac_dir: ${OFAC_DIR:data/ofac}
+  download: true
+  min_match: 0.80
+
+notifications:
+  secret_key: ${WEBHOOK_SECRET_KEY:ZGVtby1vbmx5LXdlYmhvb2stc2VjcmV0LWtleS0zMmI=}
+  allow_loopback_http: true
+
+jobs:
+  tick_interval: 2s
+  webhook_interval: 1s
+  netting_every: 1h

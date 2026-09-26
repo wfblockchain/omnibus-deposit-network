@@ -1,0 +1,154 @@
+syntax = "proto3";
+
+package api.payments.v1;
+
+option go_package = "omnibus-deposit-network/services/payments-svc/api/payments/v1;paymentsv1";
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "api/payments/v1/common.proto";
+
+// BankOperationsService is a member bank's operations console: sanctions
+// review (compliance), the omnibus position and its funding (treasury), and
+// defunds under maker-checker.
+service BankOperationsService {
+  // ListBankPayments lists the bank's clients' payments, with staff detail.
+  rpc ListBankPayments(ListBankPaymentsRequest) returns (ListBankPaymentsResponse) {
+    option (google.api.http) = { get: "/v1/ops/payments" };
+  }
+
+  // GetBankPayment returns one of the bank's clients' payments, with staff detail.
+  rpc GetBankPayment(GetBankPaymentRequest) returns (Payment) {
+    option (google.api.http) = { get: "/v1/ops/payments/{id}" };
+  }
+
+  // ListHolds lists payments held for sanctions review, and blocked or
+  // rejected cases with their OFAC report dates.
+  rpc ListHolds(ListHoldsRequest) returns (ListHoldsResponse) {
+    option (google.api.http) = { get: "/v1/ops/holds" };
+  }
+
+  // ReleaseHold clears a false positive; the payment proceeds.
+  rpc ReleaseHold(HoldDecisionRequest) returns (Payment) {
+    option (google.api.http) = { post: "/v1/ops/holds/{id}/release" body: "*" };
+  }
+
+  // BlockHold: a sanctioned party has an interest in the funds. They move to
+  // the bank's blocked account (BLCK) and a report is due to OFAC within 10
+  // business days (31 CFR 501.603).
+  rpc BlockHold(HoldDecisionRequest) returns (Payment) {
+    option (google.api.http) = { post: "/v1/ops/holds/{id}/block" body: "*" };
+  }
+
+  // RejectHold: prohibited, but no sanctioned party has an interest. Nothing
+  // moves (RR04); reported within 10 business days (31 CFR 501.604).
+  rpc RejectHold(HoldDecisionRequest) returns (Payment) {
+    option (google.api.http) = { post: "/v1/ops/holds/{id}/reject" body: "*" };
+  }
+
+  // GetLiquidity returns the bank's omnibus position, capacity, alerts,
+  // payments waiting for liquidity and defunds.
+  rpc GetLiquidity(GetLiquidityRequest) returns (Liquidity) {
+    option (google.api.http) = { get: "/v1/ops/liquidity" };
+  }
+
+  // FundOmnibus sends reserves into the joint account: Fedwire BTRC while
+  // Fedwire is open, FedNow LMT1 while it is closed.
+  rpc FundOmnibus(FundOmnibusRequest) returns (FundOmnibusResponse) {
+    option (google.api.http) = { post: "/v1/ops/funding" body: "*" };
+  }
+
+  // RequestDefund asks for free position back to the master account (maker).
+  rpc RequestDefund(RequestDefundRequest) returns (Defund) {
+    option (google.api.http) = { post: "/v1/ops/defunds" body: "*" };
+  }
+
+  // ApproveDefund is the checker; never the requester, always the same bank.
+  rpc ApproveDefund(ApproveDefundRequest) returns (Defund) {
+    option (google.api.http) = { post: "/v1/ops/defunds/{id}/approve" body: "*" };
+  }
+}
+
+message ListBankPaymentsRequest {
+  string status = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListBankPaymentsResponse {
+  repeated Payment payments = 1;
+  string next_page_token = 2;
+}
+
+message GetBankPaymentRequest {
+  string id = 1;
+}
+
+message ListHoldsRequest {}
+
+message ListHoldsResponse {
+  repeated Payment holds = 1;
+  repeated Payment cases = 2;
+}
+
+message HoldDecisionRequest {
+  string id = 1;
+  string note = 2;
+}
+
+message GetLiquidityRequest {}
+
+message Alert {
+  string id = 1;
+  string kind = 2; // LIQUIDITY | LOW_WATERMARK
+  string message = 3;
+  bool open = 4;
+  google.protobuf.Timestamp at = 5;
+}
+
+message Defund {
+  string id = 1;
+  Money amount = 2;
+  string requested_by = 3;
+  string approved_by = 4;
+  string status = 5; // AWAITING_APPROVAL | APPROVED | COMPLETED | FAILED
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message Liquidity {
+  string bank_id = 1;
+  string bank_name = 2;
+  string ticker = 3;
+  Money position = 4;
+  Money backing = 5;
+  Money pending_defund = 6;
+  Money free = 7;
+  Money mint_capacity = 8;
+  Money low_watermark = 9;
+  Money normal_watermark = 10;
+  bool fedwire_open = 11;
+  google.protobuf.Timestamp next_fedwire_open = 12;
+  string funding_instrument = 13;
+  repeated Payment awaiting_liquidity = 14;
+  repeated Alert alerts = 15;
+  repeated Defund defunds = 16;
+}
+
+message FundOmnibusRequest {
+  Money amount = 1;
+}
+
+message FundOmnibusResponse {
+  string instrument = 1; // BTRC | LMT1
+  string status = 2;     // the Fed's pacs.002 status
+  string reason = 3;
+  int32 payments_released = 4;
+}
+
+message RequestDefundRequest {
+  Money amount = 1;
+}
+
+message ApproveDefundRequest {
+  string id = 1;
+}

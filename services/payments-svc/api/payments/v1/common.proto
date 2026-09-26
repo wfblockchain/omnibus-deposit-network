@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package api.payments.v1;
+
+option go_package = "omnibus-deposit-network/services/payments-svc/api/payments/v1;paymentsv1";
+
+import "google/protobuf/timestamp.proto";
+
+// Money is an amount in a currency. The amount is a decimal string with at
+// most two fraction digits ("25000000.00"), never a float.
+message Money {
+  string amount = 1;
+  string currency = 2; // ISO 4217; USD only on this network
+}
+
+// Party identifies a payee by name, ABA routing number and account.
+message Party {
+  string name = 1;
+  string routing_number = 2; // 9-digit ABA with a valid check digit
+  string account = 3;
+}
+
+// PayeeCheck is the receiving bank's answer before any money moves, as the
+// Fed's Payee Name Verification and banks' account-validation services give
+// it.
+message PayeeCheck {
+  string account_status = 1;   // OPEN | CLOSED | NOT_FOUND
+  string name_match = 2;       // MATCH | CLOSE_MATCH | NO_MATCH
+  string registered_name = 3;  // returned on a close match only
+}
+
+// PaymentEvent is one line of a payment's audit trail.
+message PaymentEvent {
+  google.protobuf.Timestamp at = 1;
+  string actor = 2;
+  string status = 3;
+  string iso_status = 4; // pain.002 transaction status
+  string note = 5;
+  // Detail is for bank and operator staff (tickers, positions, liquidity moves);
+  // it is never returned to a client organization.
+  string detail = 6;
+}
+
+// Payment is a payment order and its lifecycle.
+message Payment {
+  string id = 1;
+  string end_to_end_id = 2;   // the client's reference, unique per organization
+  string uetr = 3;            // UUID assigned by the bank
+  string idempotency_key = 4;
+  string organization_id = 5;
+  string debtor_account = 6;
+  Party creditor = 7;
+  Money amount = 8;
+  string priority = 9;        // URGENT (ISO URGP) | NORMAL (ISO NURG)
+  string remittance = 10;
+  // AWAITING_APPROVAL | IN_PROCESS | ON_HOLD | AWAITING_LIQUIDITY |
+  // PENDING_RECEIVER | QUEUED_FOR_NETTING | SETTLED | REJECTED | CANCELLED |
+  // EXPIRED | BLOCKED
+  string status = 11;
+  // RCVD | ACTC | PATC | ACCP | PDNG | ACSP | ACSC | ACCC | RJCT | CANC | BLCK
+  string iso_status = 12;
+  string reason_code = 13;    // ISO external reason code (AC04, AM04, RR04, DU04...)
+  // on-network instant, 24x7 | network netting cycle | book transfer, same bank
+  string route = 14;
+  string route_note = 15;
+  PayeeCheck payee_check = 16;
+  int32 approvals_required = 17;
+  repeated string approvals = 18;
+  string created_by = 19;
+  google.protobuf.Timestamp created_at = 20;
+  google.protobuf.Timestamp settled_at = 21;
+  google.protobuf.Timestamp ofac_report_due = 22;
+  repeated PaymentEvent history = 23;
+  string file_id = 24;         // set when the payment came in a pain.001 file
+  string sanctions_match = 25; // bank staff only
+}
+
+// Document is an ISO 20022 message rendered as XML.
+message Document {
+  string message_type = 1; // e.g. pain.002.001.11
+  string xml = 2;
+}

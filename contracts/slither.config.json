@@ -1,0 +1,7 @@
+{
+  "filter_paths": "dependencies|test|script|src/clearing|src/market",
+  "exclude_dependencies": true,
+  "detectors_to_exclude": "naming-convention,uninitialized-local,timestamp",
+  "compile_force_framework": "foundry",
+  "foundry_compile_all": true
+}

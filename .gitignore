@@ -1,0 +1,13 @@
+# Foundry build output + soldeer-managed dependencies (restored by
+# `forge soldeer install`; pins live in contracts/foundry.toml)
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/dependencies/
+contracts/soldeer.lock
+
+# Go
+/bin/
+*.log
+# Local anvil deployments (chain 31337) are throwaway.
+contracts/deployments/31337-*.json

@@ -1,0 +1,28 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["dependencies"]
+solc_version = "0.8.30"
+via_ir = true
+optimizer_runs = 200
+# Deployment scripts write their manifests here.
+fs_permissions = [{ access = "read-write", path = "./deployments" }]
+remappings = [
+    "forge-std/=dependencies/forge-std-1.9.7/src/",
+    "@openzeppelin/contracts/=dependencies/@openzeppelin-contracts-5.3.0/",
+]
+
+# Dependencies are managed by soldeer and are not committed; `forge soldeer
+# install` restores them. The two pins below are the entire dependency surface.
+[dependencies]
+forge-std = "1.9.7"
+"@openzeppelin-contracts" = "5.3.0"
+
+[fmt]
+line_length = 100
+single_line_statement_blocks = "multi"
+sort_imports = true
+contract_new_lines = true
+bracket_spacing = true
+number_underscore = "thousands"
+wrap_comments = true

@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package api.payments.v1;
+
+option go_package = "omnibus-deposit-network/services/payments-svc/api/payments/v1;paymentsv1";
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "api/payments/v1/common.proto";
+
+// NetworkOperationsService is the operator's console over the network: members'
+// positions, the Fed joint account against the ledger, netting cycles and
+// reconciliation.
+service NetworkOperationsService {
+  // GetNetwork returns members, the Fed joint account, cycles and
+  // reconciliations.
+  rpc GetNetwork(GetNetworkRequest) returns (Network) {
+    option (google.api.http) = { get: "/v1/operator/network" };
+  }
+
+  // RunNettingCycle plans and settles a netting cycle now.
+  rpc RunNettingCycle(RunNettingCycleRequest) returns (NettingCycle) {
+    option (google.api.http) = { post: "/v1/operator/netting-cycles" body: "*" };
+  }
+
+  // Reconcile attests the Fed's camt.052 balance for the joint account.
+  rpc Reconcile(ReconcileRequest) returns (Reconciliation) {
+    option (google.api.http) = { post: "/v1/operator/reconciliations" body: "*" };
+  }
+
+  // SetClock moves the scenario clock (and the chain's) forward. Demo builds
+  // only; a production build answers PERMISSION_DENIED.
+  rpc SetClock(SetClockRequest) returns (SetClockResponse) {
+    option (google.api.http) = { post: "/v1/operator/clock" body: "*" };
+  }
+}
+
+message GetNetworkRequest {}
+
+message Member {
+  string id = 1;
+  string name = 2;
+  string ticker = 3;
+  Money position = 4;
+  Money backing = 5;
+  Money free = 6;
+}
+
+message NettingCycle {
+  string id = 1;
+  string cycle_ref = 2;
+  google.protobuf.Timestamp at = 3;
+  string trigger = 4; // scheduled | run by <name>
+  int32 discharged = 5;
+  int32 deferred = 6;
+  Money gross = 7;
+  Money net = 8;
+}
+
+message Reconciliation {
+  string id = 1;
+  google.protobuf.Timestamp at = 2;
+  Money fed_balance = 3;
+  Money ledger_total = 4;
+  bool reconciliation_break = 5;
+  bool invariants_hold = 6;
+}
+
+message Network {
+  google.protobuf.Timestamp now = 1;
+  bool fedwire_open = 2;
+  google.protobuf.Timestamp next_fedwire_open = 3;
+  Money fed_joint_account = 4;
+  Money ledger_total = 5;
+  bool reconciliation_break = 6;
+  bool invariants_hold = 7;
+  repeated Member members = 8;
+  int32 obligations_queued = 9;
+  google.protobuf.Timestamp next_scheduled_cycle = 10;
+  repeated NettingCycle cycles = 11;
+  repeated Reconciliation reconciliations = 12;
+}
+
+message RunNettingCycleRequest {}
+
+message ReconcileRequest {}
+
+message SetClockRequest {
+  google.protobuf.Timestamp time = 1;
+}
+
+message SetClockResponse {
+  google.protobuf.Timestamp now = 1;
+}

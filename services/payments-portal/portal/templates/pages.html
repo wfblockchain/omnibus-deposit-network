@@ -1,0 +1,279 @@
+{{define "head"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · {{.Brand}}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{--bg:#F3F6F7;--surface:#fff;--ink:#13202A;--ink-2:#4B5A67;--ink-3:#71808C;--rule:#D6DEE3;--rule-2:#AEBBC4;--accent:#0B5D6B;--accent-soft:#D5EAED;
+--ok:#1D7A4C;--ok-bg:#DFF1E7;--warn:#8F5F00;--warn-bg:#FAEDCD;--bad:#B1261E;--bad-bg:#FADFDC;--info:#2C5C9C;--info-bg:#DDE8F6;--mute:#5E6B76;--mute-bg:#E6EBEE;
+--sans:"Archivo","Helvetica Neue",Arial,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0C1318;--surface:#131C23;--ink:#E3EAEE;--ink-2:#A1B0BB;--ink-3:#7A8A96;--rule:#24313A;--rule-2:#3B4B57;--accent:#63C4D3;--accent-soft:#12323A;
+--ok:#5DD193;--ok-bg:#11301F;--warn:#E9B84C;--warn-bg:#33280C;--bad:#FF7B6F;--bad-bg:#3B1613;--info:#8DB5F0;--info-bg:#16263D;--mute:#A1B0BB;--mute-bg:#1D2830;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans)}
+a{color:var(--accent)}a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.top{background:var(--surface);border-bottom:1px solid var(--rule);padding:10px 20px;display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center}
+.brand{font-weight:800;font-stretch:108%;letter-spacing:-.01em}.brand small{font-family:var(--mono);font-weight:500;font-size:11px;color:var(--ink-3);margin-left:6px;letter-spacing:.05em;text-transform:uppercase}
+.nav{display:flex;gap:14px;flex-wrap:wrap}.nav a{text-decoration:none;font-size:14px}
+.who{margin-left:auto;display:flex;gap:12px;align-items:center;font-size:13px;color:var(--ink-2);flex-wrap:wrap}
+.clock{font-family:var(--mono);font-size:12px}.fw{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:2px}
+.fw.o{background:var(--ok-bg);color:var(--ok)}.fw.c{background:var(--mute-bg);color:var(--mute)}
+main{max-width:1200px;margin:0 auto;padding:24px 20px 60px;display:grid;gap:20px}
+h1{margin:0;font-size:1.7rem;font-stretch:108%;font-weight:800;letter-spacing:-.015em}h2{margin:0 0 10px;font-size:1.1rem;font-weight:700}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:16px 18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.k{font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
+.big{font-size:1.9rem;font-weight:800;font-stretch:85%;font-variant-numeric:tabular-nums}
+.flash{padding:10px 14px;border-radius:3px;font-size:14px}.flash.ok{background:var(--ok-bg);color:var(--ok)}.flash.err{background:var(--bad-bg);color:var(--bad)}
+table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+td.r,th.r{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:13px}
+.tw{overflow-x:auto}
+.pill{font-family:var(--mono);font-size:11px;font-weight:600;padding:2px 7px;border-radius:2px;white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.bad{background:var(--bad-bg);color:var(--bad)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.info{background:var(--info-bg);color:var(--info)}.pill.mute{background:var(--mute-bg);color:var(--mute)}
+.iso{font-family:var(--mono);font-size:12px;color:var(--ink-2)}
+form.inline{display:inline}form.row{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+label{display:grid;gap:4px;font-size:13px;color:var(--ink-2)}
+input,select{font:inherit;font-size:14px;padding:7px 9px;border:1px solid var(--rule-2);border-radius:3px;background:var(--surface);color:var(--ink);min-width:0}
+button{font:inherit;font-size:13px;font-weight:600;padding:7px 12px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:var(--surface);cursor:pointer}
+button.ghost{background:var(--surface);color:var(--accent)}button.danger{background:var(--surface);color:var(--bad);border-color:var(--bad)}
+.muted{color:var(--ink-2);font-size:13.5px}.note{font-size:13.5px;color:var(--ink-2);border-left:3px solid var(--accent);padding-left:10px}
+.timeline{list-style:none;margin:0;padding:0}.timeline li{display:grid;grid-template-columns:150px 230px minmax(0,1fr);gap:10px;padding:8px 0;border-bottom:1px solid var(--rule);font-size:14px}
+@media (max-width:640px){.timeline li{grid-template-columns:minmax(0,1fr)}}
+.users{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.users button{width:100%;text-align:left;background:var(--surface);color:var(--ink);border-color:var(--rule-2);font-weight:500}
+.users button b{display:block;font-weight:700}.users button span{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+pre.xml{background:var(--bg);border:1px solid var(--rule);border-radius:4px;padding:12px;font-family:var(--mono);font-size:12px;overflow:auto;max-height:420px}
+</style>
+</head>
+<body>
+{{end}}
+
+{{define "top"}}
+<header class="top">
+  <span class="brand">{{.Brand}}<small>{{if .Who.OrganizationId}}client portal{{else if eq .Who.Role "operator-ops"}}operator operations{{else}}bank operations{{end}}</small></span>
+  <nav class="nav">
+    {{if .Who.OrganizationId}}<a href="/corp">Payments</a><a href="/corp/statement">Statement</a>{{end}}
+    {{if and (not .Who.OrganizationId) (ne .Who.Role "operator-ops")}}<a href="/ops">Operations</a>{{end}}
+    {{if eq .Who.Role "operator-ops"}}<a href="/operator">Network</a>{{end}}
+  </nav>
+  <div class="who">
+    <span>{{.Who.Name}} · {{.Who.Role}}</span>
+    <form class="inline" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="ghost" type="submit">Sign out</button></form>
+  </div>
+</header>
+<main>
+{{if .OK}}<div class="flash ok" role="status">{{.OK}}</div>{{end}}
+{{if .Err}}<div class="flash err" role="alert">{{.Err}}</div>{{end}}
+{{end}}
+
+{{define "foot"}}</main></body></html>{{end}}
+
+{{define "payments"}}{{$v := index . 0}}{{$list := index . 1}}
+<div class="tw"><table>
+  <thead><tr><th>Payment</th><th>Payee</th><th class="r">Amount</th><th>Priority</th><th>Status</th><th>ISO</th><th>Route</th><th></th></tr></thead>
+  <tbody>
+  {{range $list}}
+    <tr>
+      <td><a href="/payments/{{.Id}}" title="{{.Id}}">…{{short .Id}}</a><br><span class="iso">{{.EndToEndId}}</span></td>
+      <td>{{.Creditor.Name}}<br><span class="iso">{{.Creditor.RoutingNumber}} · {{.Creditor.Account}}</span></td>
+      <td class="r">${{money .Amount}}</td>
+      <td>{{.Priority}}</td>
+      <td><span class="pill {{pill .Status}}">{{.Status}}</span></td>
+      <td class="iso">{{.IsoStatus}}{{if .ReasonCode}} {{.ReasonCode}}{{end}}</td>
+      <td class="muted">{{.Route}}</td>
+      <td>
+        {{if canAct $v.Who . "approve"}}<form class="inline" method="post" action="/payments/{{.Id}}/approve"><input type="hidden" name="csrf" value="{{$v.CSRF}}"><button type="submit">Approve</button></form>{{end}}
+        {{if canAct $v.Who . "cancel"}}<form class="inline" method="post" action="/payments/{{.Id}}/cancel"><input type="hidden" name="csrf" value="{{$v.CSRF}}"><button class="ghost" type="submit">Cancel</button></form>{{end}}
+      </td>
+    </tr>
+  {{else}}
+    <tr><td colspan="8" class="muted">No payments.</td></tr>
+  {{end}}
+  </tbody>
+</table></div>
+{{end}}
+
+{{define "login"}}<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign in · the operator Network demo</title>
+<style>
+:root{--bg:#F3F6F7;--surface:#fff;--ink:#13202A;--ink-2:#4B5A67;--ink-3:#71808C;--rule:#D6DEE3;--accent:#0B5D6B;--bad:#B1261E;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0C1318;--surface:#131C23;--ink:#E3EAEE;--ink-2:#A1B0BB;--ink-3:#7A8A96;--rule:#24313A;--accent:#63C4D3;--bad:#FF7B6F;color-scheme:dark}}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Helvetica Neue",Arial,sans-serif}
+main{max-width:980px;margin:0 auto;padding:40px 20px;display:grid;gap:18px}h1{margin:0;font-size:1.8rem}
+p{margin:0;color:var(--ink-2)}.users{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+button{font:inherit;width:100%;text-align:left;padding:10px 12px;border-radius:4px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--accent)}button b{display:block}button span{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--ink-3)}
+.err{color:var(--bad)}
+</style></head><body><main>
+  <h1>Sign in to the operator Network demo</h1>
+  <p>Pick a person. This is a demo build: in production the portal signs people in through the bank's identity provider (OpenID Connect) and the API verifies their tokens.</p>
+  {{if .Err}}<p class="err">{{.Err}}</p>{{end}}
+  <div class="users">
+    {{range $i, $u := .Users}}
+    <form method="post" action="/login"><input type="hidden" name="user" value="{{$i}}"><button type="submit"><b>{{$u.Name}}</b><span>{{$u.Role}}{{if $u.Organization}} · {{$u.Organization}}{{end}}{{if $u.Bank}} · {{$u.Bank}}{{end}}</span></button></form>
+    {{end}}
+  </div>
+</main></body></html>{{end}}
+
+{{define "error"}}{{template "head" .}}{{template "top" .}}
+<h1>{{.Data.Code}}</h1><p class="muted">{{.Data.Message}}</p>
+{{template "foot" .}}{{end}}
+
+{{define "corp"}}{{template "head" .}}{{template "top" .}}
+{{$v := .}}{{with .Data}}
+<h1>{{$v.Title}}</h1>
+<div class="grid">
+  <div class="card"><span class="k">Account {{.Account.Account}} · {{.Account.BankName}} · routing {{.Account.RoutingNumber}}</span>
+    <div class="big">${{money .Account.Balance}}</div>
+    <p class="muted">Available balance{{if ne .Account.InFlight.Amount "0.00"}}; ${{money .Account.InFlight}} in flight{{end}}. Urgent payments settle at any hour, any day; normal ones settle in the next netting cycle.</p>
+  </div>
+  {{if eq $v.Who.Role "maker"}}
+  <div class="card" style="grid-column:span 2;min-width:0">
+    <h2>New payment</h2>
+    <form class="row" method="post" action="/corp/payments">
+      <input type="hidden" name="csrf" value="{{$v.CSRF}}"><input type="hidden" name="key" value="web-{{.Key}}">
+      <label>Payee<input name="name" required value="Contoso Ltd"></label>
+      <label>Routing number<input name="routing" required value="234567898" size="10"></label>
+      <label>Account<input name="account" required value="B-4000001" size="12"></label>
+      <label>Amount (USD)<input name="amount" required value="25000000.00" size="14"></label>
+      <label>Priority<select name="priority"><option value="URGENT">Urgent (now, 24x7)</option><option value="NORMAL">Normal (next netting cycle)</option></select></label>
+      <label>Reference<input name="remittance" value="INV-88213" size="10"></label>
+      <button type="submit">Submit for approval</button>
+    </form>
+    <form class="row" method="post" action="/corp/files" enctype="multipart/form-data" style="margin-top:12px">
+      <input type="hidden" name="csrf" value="{{$v.CSRF}}"><input type="hidden" name="key" value="file-{{.Key}}">
+      <label>Or upload a pain.001.001.10 file<input type="file" name="file" accept=".xml,application/xml" required></label>
+      <button class="ghost" type="submit">Upload file</button>
+    </form>
+  </div>
+  {{end}}
+</div>
+<div class="card"><h2>Payments</h2>{{template "payments" (list $v .Payments)}}</div>
+{{end}}
+{{template "foot" .}}{{end}}
+
+{{define "payment"}}{{template "head" .}}{{template "top" .}}
+{{$v := .}}{{with .Data.P}}
+<h1>${{money .Amount}} to {{.Creditor.Name}}</h1>
+<div class="grid">
+  <div class="card"><span class="k">Status</span>
+    <div style="margin:6px 0"><span class="pill {{pill .Status}}">{{.Status}}</span> <span class="iso">pain.002 {{.IsoStatus}}{{if .ReasonCode}} · {{.ReasonCode}}{{end}}</span></div>
+    <p class="muted">Priority {{.Priority}} · created {{ts .CreatedAt}}{{if .SettledAt}} · settled {{ts .SettledAt}}{{end}}{{if .OfacReportDue}} · OFAC report due {{ts .OfacReportDue}}{{end}}</p>
+    {{if canAct $v.Who . "approve"}}
+      <form class="row" method="post" action="/payments/{{.Id}}/approve" style="margin-top:10px"><input type="hidden" name="csrf" value="{{$v.CSRF}}"><button type="submit">Approve</button></form>
+      <form class="row" method="post" action="/payments/{{.Id}}/decline" style="margin-top:8px"><input type="hidden" name="csrf" value="{{$v.CSRF}}"><input name="reason" placeholder="Reason" required><button class="danger" type="submit">Decline</button></form>
+    {{end}}
+    {{if canAct $v.Who . "cancel"}}<form class="row" method="post" action="/payments/{{.Id}}/cancel" style="margin-top:10px"><input type="hidden" name="csrf" value="{{$v.CSRF}}"><button class="ghost" type="submit">Cancel</button></form>{{end}}
+  </div>
+  <div class="card"><span class="k">Payee</span>
+    <p><b>{{.Creditor.Name}}</b><br><span class="iso">routing {{.Creditor.RoutingNumber}} · account {{.Creditor.Account}}</span></p>
+    {{if .Remittance}}<p class="muted">Remittance {{.Remittance}}</p>{{end}}
+    <p><span class="pill {{if passed .PayeeCheck}}ok{{else}}warn{{end}}">payee check · account {{.PayeeCheck.AccountStatus}} · name {{.PayeeCheck.NameMatch}}</span>{{if .PayeeCheck.RegisteredName}} <span class="muted">registered as {{.PayeeCheck.RegisteredName}}</span>{{end}}</p>
+    {{if not (passed .PayeeCheck)}}<p class="muted">The receiving bank's records do not confirm these details. An extra approver must override before the payment can go.</p>{{end}}
+    <p class="iso">End-to-end id {{.EndToEndId}}<br>UETR {{.Uetr}}<br>Payment id {{.Id}}</p>
+    <p class="muted">Approvals ({{len .Approvals}} of {{.ApprovalsRequired}}): {{range .Approvals}}{{.}} {{else}}none yet{{end}}</p>
+    {{if .SanctionsMatch}}<p class="note">{{.SanctionsMatch}}</p>{{end}}
+  </div>
+  {{if .Route}}<div class="card"><span class="k">Settlement route</span><p><b>{{.Route}}</b></p>{{if .RouteNote}}<p class="note">{{.RouteNote}}</p>{{end}}</div>{{end}}
+</div>
+<div class="card"><h2>Audit trail</h2>
+  <ul class="timeline">
+  {{range .History}}<li><span class="iso">{{ts .At}}</span><span class="iso">{{.IsoStatus}} · {{.Status}}</span><span>{{.Note}} <span class="muted">· {{.Actor}}</span>{{if .Detail}}<br><span class="iso">{{.Detail}}</span>{{end}}</span></li>{{end}}
+  </ul>
+</div>
+{{if $v.Data.Report}}<div class="card"><h2>Status report · pain.002.001.11</h2><pre class="xml">{{$v.Data.Report}}</pre></div>{{end}}
+{{end}}
+{{template "foot" .}}{{end}}
+
+{{define "statement"}}{{template "head" .}}{{template "top" .}}
+{{with .Data}}
+<h1>Statement · {{.Account.Account}}</h1>
+<p class="muted">{{.Account.OrganizationName}} at {{.Account.BankName}}. Balance ${{money .Account.Balance}}.</p>
+<div class="card tw"><table>
+  <thead><tr><th>Booked</th><th>Reference</th><th class="r">Debit</th><th class="r">Credit</th><th class="r">Balance</th></tr></thead>
+  <tbody>
+  {{range .Entries}}<tr><td class="iso">{{ts .BookingDate}}</td><td class="iso">{{.Reference}}</td><td class="r">{{if not .Credit}}${{money .Amount}}{{end}}</td><td class="r">{{if .Credit}}${{money .Amount}}{{end}}</td><td class="r">${{money .Balance}}</td></tr>
+  {{else}}<tr><td colspan="5" class="muted">No postings.</td></tr>{{end}}
+  </tbody>
+</table></div>
+<div class="card"><h2>camt.053.001.08</h2><pre class="xml">{{.Camt}}</pre></div>
+{{end}}
+{{template "foot" .}}{{end}}
+
+{{define "ops"}}{{template "head" .}}{{template "top" .}}
+{{$v := .}}{{with .Data}}
+<h1>{{$v.Title}}</h1>
+<div class="grid">
+  <div class="card"><span class="k">Omnibus position · {{.L.Ticker}}</span><div class="big">${{money .L.Position}}</div>
+    <p class="muted">Backing issued tokens ${{money .L.Backing}} · pending defund ${{money .L.PendingDefund}}<br>Free ${{money .L.Free}} · can issue now <b>${{money .L.MintCapacity}}</b><br>Watermarks: low ${{money .L.LowWatermark}}, normal ${{money .L.NormalWatermark}}</p></div>
+  <div class="card"><span class="k">Funding</span>
+    <p class="muted">{{.L.FundingInstrument}}.{{if not .L.FedwireOpen}} Next Fedwire opening {{ts .L.NextFedwireOpen}}.{{end}}</p>
+    {{if eq $v.Who.Role "treasury"}}
+    <form class="row" method="post" action="/ops/fund"><input type="hidden" name="csrf" value="{{$v.CSRF}}"><label>Amount (USD)<input name="amount" required value="10000000.00" size="14"></label><button type="submit">Fund the omnibus</button></form>
+    {{end}}
+  </div>
+</div>
+{{if .L.Alerts}}<div class="card"><h2>Alerts</h2><ul>{{range .L.Alerts}}<li>{{if .Open}}<span class="pill warn">open</span>{{else}}<span class="pill mute">closed</span>{{end}} <span class="iso">{{ts .At}}</span> {{.Message}}</li>{{end}}</ul></div>{{end}}
+{{if .L.AwaitingLiquidity}}<div class="card"><h2>Waiting for liquidity</h2>{{template "payments" (list $v .L.AwaitingLiquidity)}}</div>{{end}}
+{{if eq $v.Who.Role "compliance"}}
+<div class="card"><h2>Sanctions holds</h2>
+  {{range .Holds}}
+  <div style="border-top:1px solid var(--rule);padding:10px 0">
+    <p><a href="/payments/{{.Id}}">…{{short .Id}}</a> · ${{money .Amount}} to <b>{{.Creditor.Name}}</b> ({{.Creditor.RoutingNumber}})</p>
+    <p class="note">{{.SanctionsMatch}}</p>
+    <form class="row" method="post" action="/ops/holds/{{.Id}}/release"><input type="hidden" name="csrf" value="{{$v.CSRF}}">
+      <label>Review note<input id="note-{{.Id}}" name="note" required size="30"></label>
+      <button type="submit" title="Not the listed party: the payment proceeds">Release: false positive</button>
+      <button class="danger" type="submit" formaction="/ops/holds/{{.Id}}/block" title="A sanctioned party has an interest: hold the funds in the blocked account">Block funds</button>
+      <button class="danger" type="submit" formaction="/ops/holds/{{.Id}}/reject" title="Prohibited, but no sanctioned party has an interest: nothing moves">Reject</button>
+    </form>
+  </div>
+  {{else}}<p class="muted">No payments are held for review.</p>{{end}}
+  <p class="muted">Screened against the OFAC SDN list with moov-io/watchman. Block when a sanctioned party has an interest in the funds; reject when the payment is prohibited but no sanctioned party has an interest. Either is reported to OFAC within 10 business days.</p>
+</div>
+{{if .Cases}}<div class="card tw"><h2>Sanctions cases</h2><table><thead><tr><th>Payment</th><th>Payee</th><th class="r">Amount</th><th>Outcome</th><th>OFAC report due</th></tr></thead><tbody>
+  {{range .Cases}}<tr><td><a href="/payments/{{.Id}}">…{{short .Id}}</a></td><td>{{.Creditor.Name}}</td><td class="r">${{money .Amount}}</td><td><span class="pill {{pill .Status}}">{{.Status}}</span></td><td class="iso">{{ts .OfacReportDue}}</td></tr>{{end}}
+</tbody></table></div>{{end}}
+{{end}}
+<div class="card"><h2>Defunds</h2>
+  {{if eq $v.Who.Role "treasury"}}<form class="row" method="post" action="/ops/defunds"><input type="hidden" name="csrf" value="{{$v.CSRF}}"><label>Amount (USD)<input name="amount" required value="1000000.00" size="14"></label><button class="ghost" type="submit">Request defund</button></form>{{end}}
+  <div class="tw"><table><thead><tr><th>Id</th><th class="r">Amount</th><th>Requested by</th><th>Approved by</th><th>Status</th><th></th></tr></thead><tbody>
+  {{range .L.Defunds}}<tr><td class="iso">…{{short .Id}}</td><td class="r">${{money .Amount}}</td><td>{{.RequestedBy}}</td><td>{{.ApprovedBy}}</td><td><span class="pill info">{{.Status}}</span></td>
+    <td>{{if and (eq $v.Who.Role "treasury-approver") (eq .Status "AWAITING_APPROVAL")}}<form class="inline" method="post" action="/ops/defunds/{{.Id}}/approve"><input type="hidden" name="csrf" value="{{$v.CSRF}}"><button type="submit">Approve</button></form>{{end}}</td></tr>
+  {{else}}<tr><td colspan="6" class="muted">None.</td></tr>{{end}}
+  </tbody></table></div>
+</div>
+<div class="card"><h2>Clients' payments</h2>{{template "payments" (list $v .Payments)}}</div>
+{{end}}
+{{template "foot" .}}{{end}}
+
+{{define "operator"}}{{template "head" .}}{{template "top" .}}
+{{$v := .}}{{with .Data.N}}
+<h1>{{$v.Title}}</h1>
+<div class="grid">
+  <div class="card"><span class="k">Fed joint account (camt.052)</span><div class="big">${{money .FedJointAccount}}</div>
+    <p class="muted">Ledger total ${{money .LedgerTotal}} · {{if .ReconciliationBreak}}<span class="pill bad">break: minting halted</span>{{else}}<span class="pill ok">books agree</span>{{end}} · invariants {{if .InvariantsHold}}hold{{else}}<b>FAIL</b>{{end}}</p>
+    <form class="inline" method="post" action="/operator/reconcile"><input type="hidden" name="csrf" value="{{$v.CSRF}}"><button class="ghost" type="submit">Reconcile now</button></form>
+  </div>
+  <div class="card"><span class="k">Netting</span><div class="big">{{.ObligationsQueued}}</div><p class="muted">obligations queued{{if .NextScheduledCycle}}; next scheduled cycle {{ts .NextScheduledCycle}}{{end}}</p>
+    <form class="inline" method="post" action="/operator/netting"><input type="hidden" name="csrf" value="{{$v.CSRF}}"><button type="submit">Run netting cycle</button></form>
+  </div>
+  <div class="card"><span class="k">Scenario clock (demo)</span><p class="muted">Now {{ts .Now}}; Fedwire {{if .FedwireOpen}}open{{else}}closed until {{ts .NextFedwireOpen}}{{end}}.</p>
+    <form class="row" method="post" action="/operator/clock"><input type="hidden" name="csrf" value="{{$v.CSRF}}">
+      <button class="ghost" name="to" value="hour">+1 hour</button><button class="ghost" name="to" value="day">+1 day</button>
+      <button class="ghost" name="to" value="saturday">Saturday 11:00</button><button class="ghost" name="to" value="open">Next Fedwire opening</button><button class="ghost" name="to" value="monday">Monday 09:00</button></form>
+  </div>
+</div>
+<div class="card tw"><h2>Members</h2><table><thead><tr><th>Bank</th><th>Ticker</th><th class="r">Position</th><th class="r">Backing</th><th class="r">Free</th></tr></thead><tbody>
+  {{range .Members}}<tr><td>{{.Name}} <span class="iso">{{.Id}}</span></td><td>{{.Ticker}}</td><td class="r">${{money .Position}}</td><td class="r">${{money .Backing}}</td><td class="r">${{money .Free}}</td></tr>{{end}}
+</tbody></table></div>
+{{if .Cycles}}<div class="card tw"><h2>Netting cycles</h2><table><thead><tr><th>When</th><th>Trigger</th><th class="r">Settled</th><th class="r">Deferred</th><th class="r">Gross</th><th class="r">Net moved</th></tr></thead><tbody>
+  {{range .Cycles}}<tr><td class="iso">{{ts .At}}</td><td>{{.Trigger}}</td><td class="r">{{.Discharged}}</td><td class="r">{{.Deferred}}</td><td class="r">${{money .Gross}}</td><td class="r">${{money .Net}}</td></tr>{{end}}
+</tbody></table></div>{{end}}
+{{if .Reconciliations}}<div class="card tw"><h2>Reconciliations</h2><table><thead><tr><th>When</th><th class="r">Fed joint account</th><th class="r">Ledger</th><th>Result</th></tr></thead><tbody>
+  {{range .Reconciliations}}<tr><td class="iso">{{ts .At}}</td><td class="r">${{money .FedBalance}}</td><td class="r">${{money .LedgerTotal}}</td><td>{{if .ReconciliationBreak}}<span class="pill bad">break</span>{{else}}<span class="pill ok">agree</span>{{end}}</td></tr>{{end}}
+</tbody></table></div>{{end}}
+{{end}}
+{{template "foot" .}}{{end}}

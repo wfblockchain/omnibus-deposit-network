@@ -1,0 +1,683 @@
+<title>Omnibus Contract Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#F2F4F3; --panel:#FFFFFF; --panel-2:#E9EDEB; --ink:#141C1A; --ink-2:#48534F; --ink-3:#77827E;
+  --line:#D3DAD7; --line-2:#AEB8B4;
+  --home:#0E4F4A; --home-soft:#E1EEEC; --remote:#3F6E2E; --remote-soft:#E6F0E1;
+  --bank-a:#2A55B8; --bank-a-soft:#E3EAF8; --bank-b:#B0502A; --bank-b-soft:#F7E6DE;
+  --op:#5A47AE; --op-soft:#ECE8F8; --money:#9C7409; --money-soft:#F6EFD9;
+  --fast:#B45309; --fast-soft:#FDF0DD; --slow:#5A47AE; --slow-soft:#ECE8F8;
+  --hot:#E2861B; --ok:#1F7A4D;
+  --display:"Bricolage Grotesque","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0F1413; --panel:#171E1C; --panel-2:#1F2825; --ink:#E7EEEB; --ink-2:#B3C0BB; --ink-3:#83918C;
+    --line:#2B3633; --line-2:#44524D;
+    --home:#5CC2B6; --home-soft:#16302D; --remote:#8AC36F; --remote-soft:#1B2C16;
+    --bank-a:#7FA3FF; --bank-a-soft:#18233F; --bank-b:#F0906A; --bank-b-soft:#3A2016;
+    --op:#A898F2; --op-soft:#241E40; --money:#E0B84A; --money-soft:#332A10;
+    --fast:#F2A33A; --fast-soft:#35240C; --slow:#A898F2; --slow-soft:#241E40;
+    --hot:#FFB24D; --ok:#5FD39A;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0F1413; --panel:#171E1C; --panel-2:#1F2825; --ink:#E7EEEB; --ink-2:#B3C0BB; --ink-3:#83918C;
+  --line:#2B3633; --line-2:#44524D;
+  --home:#5CC2B6; --home-soft:#16302D; --remote:#8AC36F; --remote-soft:#1B2C16;
+  --bank-a:#7FA3FF; --bank-a-soft:#18233F; --bank-b:#F0906A; --bank-b-soft:#3A2016;
+  --op:#A898F2; --op-soft:#241E40; --money:#E0B84A; --money-soft:#332A10;
+  --fast:#F2A33A; --fast-soft:#35240C; --slow:#A898F2; --slow-soft:#241E40;
+  --hot:#FFB24D; --ok:#5FD39A;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:1360px;margin:0 auto;padding-inline:24px;padding-block:28px 64px}
+@media (max-width:560px){.wrap{padding-inline:16px}}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance}
+h1{font-size:clamp(1.8rem,2vw + 1.1rem,2.6rem);font-weight:800;letter-spacing:-.01em}
+h2{font-size:1.45rem;font-weight:800}
+h3{font-size:1.05rem;font-weight:600}
+p{margin:0}
+code,.mono{font-family:var(--mono);font-size:.86em}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--hot);outline-offset:2px}
+
+header.top{display:grid;gap:8px;margin-bottom:18px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.lede{max-width:78ch;color:var(--ink-2)}
+.key{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--ink-2)}
+.key span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+.chip{font-family:var(--mono);font-size:11px;font-weight:600;padding:2px 7px;border-radius:999px;white-space:nowrap;display:inline-block}
+.chip.fast{background:var(--fast-soft);color:var(--fast)}
+.chip.slow{background:var(--slow-soft);color:var(--slow)}
+.chip.bank{background:var(--bank-a-soft);color:var(--bank-a)}
+.chip.net{background:var(--home-soft);color:var(--home)}
+.chip.any{background:var(--panel-2);color:var(--ink-2)}
+
+/* flows bar */
+.flows{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.flows button{border:1px solid var(--line-2);background:var(--panel);border-radius:999px;padding:5px 12px;font-size:13.5px;font-weight:500}
+.flows button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.flows button:hover{border-color:var(--ink-2)}
+
+/* main grid */
+.main{display:grid;gap:14px}
+.below{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:900px){.below{grid-template-columns:minmax(0,1fr)}}
+.mapcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.mapscroll{overflow-x:auto}
+svg.map{display:block;width:100%;min-width:980px;height:auto}
+svg text{font-family:var(--body)}
+.band-l{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.zone{stroke-width:1.5}
+.zone.home{fill:var(--home-soft);stroke:var(--home)}
+.zone.remote{fill:var(--remote-soft);stroke:var(--remote)}
+.zone.cb{fill:var(--money-soft);stroke:var(--money);stroke-dasharray:6 4}
+.zone.off{fill:none;stroke:var(--line-2);stroke-dasharray:3 4}
+.node{cursor:pointer}
+.node rect.box{fill:var(--panel);stroke:var(--line-2);stroke-width:1.5;transition:stroke .15s,stroke-width .15s}
+.node.contract rect.box{stroke:var(--ink-2)}
+.node.ext rect.box{stroke-dasharray:5 4}
+.node.ghost{opacity:.35}
+.node.ghost.show{opacity:1}
+.node:hover rect.box{stroke:var(--hot)}
+.node.sel rect.box{stroke:var(--op);stroke-width:3;stroke-dasharray:6 3}
+.node.on rect.box{stroke:var(--hot);stroke-width:3}
+.node .n1{font-family:var(--display);font-weight:600;font-size:15px;fill:var(--ink)}
+.node .n2{font-family:var(--mono);font-size:11px;fill:var(--ink-3)}
+.node .tagbar{stroke:none}
+.edge path{fill:none;stroke:var(--line-2);stroke-width:1.4}
+.edge.money path{stroke:var(--money);stroke-dasharray:6 4}
+.edge.msg path{stroke-dasharray:3 4}
+.edge text{display:none;font-family:var(--mono);font-size:11px;fill:var(--ink-3);paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round}
+.edge.dim{opacity:0}
+.edge.base{opacity:.4}
+.edge.inflow{opacity:.9}
+.edge.inflow path{stroke:var(--ink-3)}
+.edge.inflow text,.edge.done text,.edge.now text{display:block}
+.edge.now{opacity:1}
+.edge.now path{stroke:var(--hot);stroke-width:3}
+.edge.now text{fill:var(--ink);font-weight:600}
+.edge.done path{stroke:var(--ink-2);stroke-width:2}
+.dot{fill:var(--hot)}
+.arrow{fill:var(--line-2)}
+
+/* side panel */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:10px}
+.card-h{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.ctrl{display:flex;gap:6px;flex-wrap:wrap}
+.ctrl button{border:1px solid var(--line-2);background:var(--panel);border-radius:6px;padding:4px 10px;font-size:13px;font-weight:600}
+.ctrl button.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.ctrl button:disabled{opacity:.4;cursor:default}
+ol.steps{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+ol.steps li button{width:100%;text-align:left;border:1px solid transparent;background:none;border-radius:8px;padding:7px 9px;display:grid;gap:3px}
+ol.steps li button:hover{background:var(--panel-2)}
+ol.steps li button[aria-current="step"]{background:var(--fast-soft);border-color:var(--hot)}
+.st-h{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.st-n{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.st-fn{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink);word-break:break-word}
+.st-t{font-size:13.5px;color:var(--ink-2)}
+.fsum{font-size:14px;color:var(--ink-2)}
+.insp h3{font-size:1.25rem}
+.insp .path{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+.insp .what{font-size:14px;color:var(--ink-2)}
+.grp{display:grid;gap:4px}
+.grp-h{display:flex;gap:8px;align-items:center;font-size:12.5px;font-weight:600;color:var(--ink-2)}
+.fns{display:flex;flex-wrap:wrap;gap:4px}
+.fns code{background:var(--panel-2);padding:2px 6px;border-radius:4px;font-size:11.5px}
+.state{display:grid;gap:2px;font-size:13px;color:var(--ink-2)}
+.state code{color:var(--ink)}
+.hint{font-size:12.5px;color:var(--ink-3)}
+
+/* lower sections */
+section{margin-top:36px;display:grid;gap:12px}
+.sub{color:var(--ink-2);max-width:78ch}
+.tscroll{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:13.5px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;background:var(--panel-2)}
+tr:last-child td{border-bottom:0}
+td .fns code{font-size:11px}
+.inv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:820px){.inv{grid-template-columns:minmax(0,1fr)}}
+.inv article{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:6px;align-content:start}
+.inv .rule{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink)}
+.inv p{font-size:14px;color:var(--ink-2)}
+.inv .where{font-size:12.5px;color:var(--ink-3)}
+footer{margin-top:32px;font-size:13px;color:var(--ink-3);max-width:90ch}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">omnibus-deposit-network · contracts/src/omnibus</div>
+    <h1>Omnibus Contract Map</h1>
+    <p class="lede">Every contract in the network, who may call what, and how the main flows move through them. Pick a flow to step through it call by call, or click a contract to see its functions grouped by who may call them. Restrictive actions are <span class="chip fast">fast</span>; permissive ones go through the <span class="chip slow">timelock</span>.</p>
+    <div class="key">
+      <span><i class="sw" style="background:var(--home)"></i>Home chain</span>
+      <span><i class="sw" style="background:var(--remote)"></i>Asset chain</span>
+      <span><i class="sw" style="background:var(--money)"></i>Central-bank money</span>
+      <span><i class="sw" style="background:var(--op)"></i>Operator</span>
+      <span><i class="sw" style="background:var(--bank-a)"></i>Bank A</span>
+      <span><i class="sw" style="background:var(--bank-b)"></i>Bank B</span>
+      <span>— call</span><span>··· attested message</span><span>- - money</span>
+    </div>
+  </header>
+
+  <nav class="flows" id="flows" aria-label="Flows"></nav>
+
+  <div class="main">
+    <div class="mapcard">
+      <div class="mapscroll">
+        <svg class="map" id="map" viewBox="0 0 1200 620" role="img" aria-labelledby="map-t">
+          <title id="map-t">Contracts on the home chain and the asset chain, the central-bank accounts below them, and the operator, banks and attesters that call them</title>
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--line-2)"/></marker>
+            <marker id="ah-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--hot)"/></marker>
+            <marker id="ah-money" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--money)"/></marker>
+          </defs>
+          <g id="zones"></g>
+          <g id="edges"></g>
+          <g id="nodes"></g>
+          <circle id="dot" class="dot" r="6" cx="-20" cy="-20"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="below">
+      <div class="card" id="pane-flow">
+        <div class="card-h">Flow</div>
+        <h3 id="f-title"></h3>
+        <p class="fsum" id="f-sum"></p>
+        <div class="ctrl">
+          <button type="button" id="b-play" class="primary">Play</button>
+          <button type="button" id="b-prev" aria-label="Previous step">Prev</button>
+          <button type="button" id="b-next" aria-label="Next step">Next</button>
+        </div>
+        <ol class="steps" id="steps"></ol>
+      </div>
+      <div class="card insp" aria-live="polite">
+        <div class="card-h">Contract</div>
+        <div id="pane-contract" style="display:grid;gap:10px"></div>
+        <p class="hint">Click any box on the map to inspect it. Keys: ← → step, space play.</p>
+      </div>
+    </div>
+  </div>
+
+  <section aria-labelledby="roles-h">
+    <h2 id="roles-h">Who can do what</h2>
+    <p class="sub">Every admin role is a two-step, delayed handover (OpenZeppelin <code>AccessControlDefaultAdminRules</code>), and the deployment scripts end with the deployer holding no role at all. The operator's governor and admin roles belong to a timelock; the guardian holds only restrictive powers.</p>
+    <div class="tscroll"><table id="roles"></table></div>
+  </section>
+
+  <section aria-labelledby="inv-h">
+    <h2 id="inv-h">What always holds</h2>
+    <p class="sub">The invariants the contracts enforce, where each is enforced, and the tests that pin it.</p>
+    <div class="inv" id="inv"></div>
+  </section>
+
+  <footer>Generated from the contracts in <code>contracts/src/omnibus</code> of omnibus-deposit-network. Function names and role gates are the contracts' own. Banks and tickers are fictional.</footer>
+</div>
+
+<script>
+(function () {
+'use strict';
+var NS = 'http://www.w3.org/2000/svg';
+function el(t, a, p) { var e = document.createElementNS(NS, t); for (var k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; }
+function $(id) { return document.getElementById(id); }
+var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ------------------------------------------------------------------ zones */
+var ZONES = [
+  {cls: 'off', x: 16, y: 10, w: 1168, h: 104, label: 'People, services and keys', col: 'var(--ink-3)'},
+  {cls: 'home', x: 16, y: 132, w: 764, h: 348, label: 'Home chain · the operator’s network', col: 'var(--home)'},
+  {cls: 'remote', x: 796, y: 132, w: 388, h: 348, label: 'Asset chain · public', col: 'var(--remote)'},
+  {cls: 'cb', x: 16, y: 498, w: 1168, h: 110, label: 'Central bank · Fedwire / FedNow', col: 'var(--money)'}
+];
+
+/* ------------------------------------------------------------------ nodes */
+// kind: actor | contract | ext | account; tone for the colour bar
+var N = {
+  op:     {x: 28,  y: 34, w: 290, h: 68, t: 'Operator', s: 'timelock · guardian · services', kind: 'actor', tone: 'var(--op)'},
+  att:    {x: 330, y: 34, w: 150, h: 68, t: 'Network attesters', s: 'strict-majority quorum', kind: 'actor', tone: 'var(--op)'},
+  bankA:  {x: 492, y: 34, w: 262, h: 68, t: 'Bank A', s: 'issuer · compliance · registrar · gateway', kind: 'actor', tone: 'var(--bank-a)'},
+  bankB:  {x: 766, y: 34, w: 200, h: 68, t: 'Bank B', s: 'gateway · approver · issuer', kind: 'actor', tone: 'var(--bank-b)'},
+  any:    {x: 978, y: 34, w: 194, h: 68, t: 'Holders & anyone', s: 'payers · relayers · keepers', kind: 'actor', tone: 'var(--ink-3)'},
+
+  router: {x: 296, y: 162, w: 200, h: 58, t: 'PaymentRouter', s: 'pay · accept · reject', kind: 'contract', tone: 'var(--home)'},
+  msgH:   {x: 564, y: 162, w: 200, h: 58, t: 'CrossChainMessenger', s: 'home · burn, attest, mint', kind: 'contract', tone: 'var(--home)'},
+  tokA:   {x: 36,  y: 244, w: 200, h: 58, t: 'BankToken · A-dT', s: 'Bank A’s deposit token', kind: 'contract', tone: 'var(--bank-a)'},
+  regA:   {x: 36,  y: 322, w: 200, h: 46, t: 'HolderRegistry · A', s: 'Bank A’s allowlist', kind: 'contract', tone: 'var(--bank-a)'},
+  ledger: {x: 296, y: 262, w: 200, h: 88, t: 'OmnibusLedger', s: 'position =', kind: 'contract', tone: 'var(--home)'},
+  tokB:   {x: 36,  y: 400, w: 200, h: 58, t: 'BankToken · B-dT', s: 'Bank B’s deposit token', kind: 'contract', tone: 'var(--bank-b)'},
+  netting:{x: 564, y: 282, w: 200, h: 58, t: 'OmnibusNetting', s: 'obligations · verified cycles', kind: 'contract', tone: 'var(--home)'},
+  tokA2:  {x: 296, y: 400, w: 200, h: 58, t: 'BankToken · A-dT v2', s: 'successor, during replacement', kind: 'contract ghost', tone: 'var(--bank-a)'},
+
+  msgR:   {x: 810, y: 162, w: 180, h: 58, t: 'CrossChainMessenger', s: 'asset chain · spoke', kind: 'contract', tone: 'var(--remote)'},
+  dvp:    {x: 1002, y: 162, w: 170, h: 58, t: 'DvPSettlement', s: 'security vs deposit token', kind: 'contract', tone: 'var(--remote)'},
+  rtokA:  {x: 810, y: 262, w: 180, h: 58, t: 'RemoteBankToken · A-dT', s: 'Bank A’s token abroad', kind: 'contract', tone: 'var(--bank-a)'},
+  rregA:  {x: 810, y: 348, w: 180, h: 46, t: 'HolderRegistry · A', s: 'the allowlist abroad', kind: 'contract', tone: 'var(--bank-a)'},
+  sec:    {x: 1002, y: 262, w: 170, h: 58, t: 'Security token', s: 'ERC-7943 · external', kind: 'ext', tone: 'var(--ink-3)'},
+
+  mA:     {x: 150, y: 530, w: 190, h: 56, t: 'Bank A master', s: 'reserves at the central bank', kind: 'account', tone: 'var(--money)'},
+  joint:  {x: 505, y: 524, w: 210, h: 68, t: 'Network joint account', s: 'one balance = Σ positions', kind: 'account', tone: 'var(--money)'},
+  mB:     {x: 880, y: 530, w: 190, h: 56, t: 'Bank B master', s: 'reserves at the central bank', kind: 'account', tone: 'var(--money)'}
+};
+
+/* ------------------------------------------------------------------ edges */
+// [id, from, to, label, kind(call|msg|money), base(true = drawn at rest), bend]
+var E = [
+  ['mint', 'bankA', 'tokA', 'mint', 'call', false, -40],
+  ['encumber', 'tokA', 'ledger', 'encumber / release', 'call', true, 0],
+  ['redeem', 'any', 'tokA', 'redeem', 'call', false, 60],
+  ['pay', 'any', 'router', 'pay', 'call', false, 0],
+  ['hold', 'router', 'tokA', 'hold · burnHeld', 'call', true, 0],
+  ['accept', 'bankB', 'router', 'accept · reject', 'call', false, 30],
+  ['move', 'router', 'ledger', 'moveBacking', 'call', true, 0],
+  ['routerMint', 'router', 'tokB', 'routerMint', 'call', true, 60],
+  ['fund', 'mA', 'joint', 'pacs.009 fund', 'money', true, 0],
+  ['defundPay', 'joint', 'mB', 'pacs.009 defund', 'money', true, 0],
+  ['advice', 'joint', 'op', 'advice · camt.052', 'money', false, -90],
+  ['credit', 'op', 'ledger', 'creditFunding · confirmDefund · attestFedBalance', 'call', false, 40],
+  ['defund', 'bankB', 'ledger', 'requestDefund · approveDefund', 'call', false, -60],
+  ['submit', 'bankA', 'netting', 'submit', 'call', false, 0],
+  ['cycle', 'op', 'netting', 'settleCycle', 'call', false, 70],
+  ['applyNet', 'netting', 'ledger', 'applyNet', 'call', true, 0],
+  ['burnSend', 'any', 'msgH', 'depositForBurn', 'call', false, 0],
+  ['msgBurn', 'msgH', 'tokA', 'messengerBurn · messengerMint', 'call', true, 70],
+  ['remote', 'msgH', 'ledger', 'recordRemote', 'call', true, 0],
+  ['wire', 'msgH', 'msgR', 'attested message', 'msg', true, 0],
+  ['attest', 'att', 'msgR', 'm-of-n signatures', 'msg', false, 0],
+  ['issuerSig', 'bankA', 'msgR', 'issuer signature', 'msg', false, 20],
+  ['relay', 'any', 'msgR', 'receiveMessage · bounce', 'call', false, -20],
+  ['rmint', 'msgR', 'rtokA', 'messengerMint · messengerBurn', 'call', true, 0],
+  ['revoke', 'msgR', 'rregA', 'revoke', 'call', true, -70],
+  ['sendRevoke', 'bankA', 'msgH', 'sendRevocation', 'call', false, 30],
+  ['affirm', 'any', 'dvp', 'affirm · affirmFor', 'call', false, 0],
+  ['receiveCash', 'dvp', 'msgR', 'receiveCash → receiveMessage', 'call', true, 0],
+  ['pull', 'dvp', 'sec', 'transferFrom seller→buyer', 'call', true, 0],
+  ['payCash', 'dvp', 'rtokA', 'cash to seller', 'call', true, 30],
+  ['begin', 'op', 'ledger', 'beginTokenReplacement', 'call', false, -40],
+  ['migrate', 'any', 'tokA2', 'migrateBalances', 'call', false, 0],
+  ['readOld', 'tokA2', 'tokA', 'reads balances, freezes, blocks', 'call', false, 40],
+  ['record', 'tokA2', 'ledger', 'recordMigration', 'call', false, 0],
+  ['retire', 'ledger', 'tokA', 'retire', 'call', false, -40],
+  ['pauseA', 'bankA', 'tokA', 'pause', 'call', false, 40],
+  ['suspend', 'op', 'ledger', 'suspend (guardian)', 'call', false, -40],
+  ['guardMsg', 'op', 'msgH', 'pause · lowerCorridorCap · disableAttester', 'call', false, -30],
+  ['pauseRouter', 'op', 'router', 'pause', 'call', false, 20]
+];
+var EM = {}; E.forEach(function (e) { EM[e[0]] = e; });
+
+/* ------------------------------------------------------------------ flows */
+// step: [edgeId|null, focusNodes[], fn, gate, text]
+var FLOWS = [
+  {id: 'payment', t: 'Cross-bank payment', s: 'A holder of A-dT pays a Bank B customer. The router holds the tokens until Bank B accepts, then burns, moves backing and mints B-dT in one transaction. The central-bank balance does not move.', steps: [
+    ['pay', ['any', 'router'], 'PaymentRouter.pay(A-dT, B-dT, payee, amount, UETR)', 'anyone (the payer)', 'The payer names both tokens; the payment id derives from payer and UETR, so a retry cannot pay twice.'],
+    ['hold', ['router', 'tokA'], 'BankToken.hold(payer, amount, paymentId)', 'router only', 'Bank B requires acceptance, so the payer’s A-dT is held, not moved.'],
+    ['accept', ['bankB', 'router'], 'PaymentRouter.accept(paymentId)', 'Bank B gateway', 'Bank B screens its customer and accepts within the window (or rejects with an ISO reason code; after the deadline anyone can expire it).'],
+    ['hold', ['router', 'tokA'], 'BankToken.burnHeld(paymentId)', 'router only', 'The held A-dT burns; the router checks the burned hold matches the payment.'],
+    ['move', ['router', 'ledger'], 'OmnibusLedger.moveBacking(A, B, amount)', 'ROUTER_ROLE', 'Backing moves from Bank A’s position to Bank B’s inside the joint account.'],
+    ['routerMint', ['router', 'tokB'], 'BankToken.routerMint(payee, amount)', 'router only', 'B-dT is minted to the payee: converted at par, in the same transaction.']
+  ]},
+  {id: 'mint', t: 'Mint and redeem', s: 'A bank turns a customer’s deposit into tokens and back. Every mint encumbers the bank’s free position; every redemption releases it.', steps: [
+    ['mint', ['bankA', 'tokA'], 'BankToken.mint(to, amount, ref)', 'ISSUER_ROLE (Bank A)', 'Bank A debits the customer’s deposit in its core system and mints the same amount; the reference is single-use.'],
+    ['encumber', ['tokA', 'ledger'], 'OmnibusLedger.encumber(amount)', 'registered token only', 'Free position becomes backing. Refused if it would breach the issuance cap, the prefund floor, or during a reconciliation break.'],
+    ['redeem', ['any', 'tokA'], 'BankToken.redeem(amount, ref)', 'the holder', 'The holder burns tokens; the bank credits the deposit.'],
+    ['encumber', ['tokA', 'ledger'], 'OmnibusLedger.release(amount)', 'registered token only', 'Backing becomes free position again.']
+  ]},
+  {id: 'funding', t: 'Funding and defund', s: 'Reserves enter and leave the joint account only in the central bank’s operating day. Defunds are maker-checker and can only take free position.', steps: [
+    ['fund', ['mA', 'joint'], 'pacs.009 master → joint', 'Bank A treasury', 'Bank A wires reserves to the joint account (or uses a FedNow liquidity transfer while Fedwire is closed).'],
+    ['advice', ['joint', 'op'], 'credit advice (camt.054 / camt.052)', 'central bank', 'The operator’s funding service sees the credit on the joint account.'],
+    ['credit', ['op', 'ledger'], 'OmnibusLedger.creditFunding(member, amount, fedRef)', 'FUNDING_ROLE', 'Bank A’s position grows; the Fedwire reference is single-use.'],
+    ['defund', ['bankB', 'ledger'], 'OmnibusLedger.requestDefund(member, amount, ref)', 'Bank B gateway (maker)', 'Bank B asks for free position back; backing is never defundable.'],
+    ['defund', ['bankB', 'ledger'], 'OmnibusLedger.approveDefund(defundId)', 'Bank B approver (checker)', 'A different key approves.'],
+    ['defundPay', ['joint', 'mB'], 'pacs.009 joint → master', 'operator', 'The operator wires the reserves out in Fedwire hours.'],
+    ['credit', ['op', 'ledger'], 'OmnibusLedger.confirmDefund(defundId, fedRef)', 'FUNDING_ROLE', 'On the central bank’s confirmation the position is debited.']
+  ]},
+  {id: 'netting', t: 'Netting cycle', s: 'Deposit-funded obligations queue on free positions and settle by moving only each bank’s net. The contract recomputes every net; a cycle can never create credit.', steps: [
+    ['submit', ['bankA', 'netting'], 'OmnibusNetting.submit(payer, payee, amount, ref)', 'payer’s gateway', 'Bank A queues an obligation to Bank B; nothing moves yet.'],
+    ['submit', ['bankA', 'netting'], 'OmnibusNetting.submit(...)', 'each payer’s gateway', 'Other banks queue theirs.'],
+    ['cycle', ['op', 'netting'], 'OmnibusNetting.settleCycle(cycleId, members, nets, discharged)', 'OPERATOR_ROLE', 'The operator submits a plan from the netting planner.'],
+    ['applyNet', ['netting', 'ledger'], 'OmnibusLedger.applyNet(members, nets)', 'NETTING_ROLE', 'Nets must sum to zero and every net debit must be fundable from free position.']
+  ]},
+  {id: 'xchain', t: 'Tokens to another chain', s: 'Burn at home, attest, mint abroad. The backing never leaves the joint account; home counts the supply abroad per chain. Every mint needs two keys.', steps: [
+    ['burnSend', ['any', 'msgH'], 'CrossChainMessenger.depositForBurn(member, amount, dest, recipient)', 'the holder', 'Refused above the corridor cap for that bank and chain.'],
+    ['msgBurn', ['msgH', 'tokA'], 'BankToken.messengerBurn(from, amount)', 'MESSENGER_ROLE', 'The tokens burn at home.'],
+    ['remote', ['msgH', 'ledger'], 'OmnibusLedger.recordRemote(member, +amount)', 'MESSENGER_ROLE', 'Backing now covers home supply + remote supply.'],
+    ['attest', ['att', 'msgR'], 'threshold signatures over the message', 'network attesters', 'A strict majority signs, only once the burn is final.'],
+    ['issuerSig', ['bankA', 'msgR'], 'issuer signature over the same message', 'Bank A’s own key', 'The second key: no one but the issuing bank can create its deposits abroad.'],
+    ['relay', ['any', 'msgR'], 'CrossChainMessenger.receiveMessage(message, signatures, issuerSignature)', 'anyone (or the named destination caller)', 'Checks attestations, source, nonce and the chain’s supply cap.'],
+    ['rmint', ['msgR', 'rtokA'], 'RemoteBankToken.messengerMint(recipient, amount)', 'messenger only', 'Minted to an admitted holder; an unadmitted recipient makes the message undeliverable, so it bounces.']
+  ]},
+  {id: 'bounce', t: 'Bounce and return', s: 'A transfer whose recipient cannot hold the token abroad is sent back with the same attestations. Its nonce is spent, so it can never mint later.', steps: [
+    ['relay', ['any', 'msgR'], 'CrossChainMessenger.bounce(message, signatures, issuerSignature)', 'anyone', 'Allowed only when the recipient cannot receive (a paused token makes a message wait instead).'],
+    ['wire', ['msgR', 'msgH'], 'RETURN message', 'attested', 'A return to the sender’s returnTo, attested like any message.'],
+    ['msgBurn', ['msgH', 'tokA'], 'BankToken.messengerMint(returnTo, amount)', 'MESSENGER_ROLE', 'Re-minted at home; if returnTo cannot hold it, it lands in the bank’s suspense wallet.'],
+    ['remote', ['msgH', 'ledger'], 'OmnibusLedger.recordRemote(member, −amount)', 'MESSENGER_ROLE', 'Home’s corridor count falls back; home never takes back more than it sent.']
+  ]},
+  {id: 'revoke', t: 'Revocation follows the token', s: 'When a bank drops a holder, the revocation is broadcast from home and applied abroad on arrival. Admissions stay local, so a hub key can only restrict.', steps: [
+    ['sendRevoke', ['bankA', 'msgH'], 'CrossChainMessenger.sendRevocation(member, account, dest, reason)', 'Bank A registrar', 'Only the bank’s own registrar at home may broadcast.'],
+    ['wire', ['msgH', 'msgR'], 'POLICY message', 'attested + issuer key', 'The same two keys as a mint.'],
+    ['revoke', ['msgR', 'rregA'], 'HolderRegistry.revoke(account, reason)', 'messenger holds REGISTRAR_ROLE abroad', 'The holder can no longer send or receive A-dT on the asset chain.']
+  ]},
+  {id: 'dvp', t: 'DvP on the asset chain', s: 'A tokenized security settles against Bank A’s deposit token where the security lives. Both legs move in one transaction, or neither does.', steps: [
+    ['affirm', ['any', 'dvp'], 'DvPSettlement.affirm(terms) / affirmFor(terms, party, sig)', 'seller and buyer', 'Both parties affirm identical EIP-712 terms; the trade is matched.'],
+    ['burnSend', ['any', 'msgH'], 'depositForBurnWithHook(member, amount, dest, venue, venue, (tradeId, buyer), returnTo)', 'the buyer, at home', 'Cash leaves home with the trade id attached; only the venue may deliver it.'],
+    ['receiveCash', ['dvp', 'msgR'], 'DvPSettlement.receiveCash(message, signatures, issuerSignature)', 'anyone', 'The venue delivers its own message; the cash mints to it and funds the trade.'],
+    ['pull', ['dvp', 'sec'], 'security.transferFrom(seller, buyer, shares)', 'venue, with the seller’s approval', 'The asset is pulled from the seller: the venue never holds the security.'],
+    ['payCash', ['dvp', 'rtokA'], 'cash transfer to the seller', 'venue', 'Settled. Late or mismatched cash is credited, never refused, and can go back home.']
+  ]},
+  {id: 'replace', t: 'Replacing a flawed token', s: 'A fixed successor takes over without moving a cent of backing. Balances, freezes and blocked keys are read from the paused old contract itself.', steps: [
+    ['pauseA', ['bankA', 'tokA'], 'BankToken.pause()', 'Bank A pauser', 'The bank stops its token; open holds must settle or expire first.'],
+    ['begin', ['op', 'ledger', 'tokA2'], 'OmnibusLedger.beginTokenReplacement(member, successor)', 'GOVERNOR_ROLE (timelock)', 'Both tokens paused, no open holds, successor empty; the old supply becomes the target.'],
+    ['migrate', ['any', 'tokA2'], 'BankToken.migrateBalances(holders)', 'anyone, in batches', 'The successor re-creates each holder from the predecessor’s own state.'],
+    ['readOld', ['tokA2', 'tokA'], 'predecessor.balanceOf / getFrozenTokens / blocked', 'view', 'Blocks and freezes carry over even for zero balances.'],
+    ['record', ['tokA2', 'ledger'], 'OmnibusLedger.recordMigration(amount)', 'the successor only', 'The total can never exceed the old supply.'],
+    ['retire', ['ledger', 'tokA'], 'OmnibusLedger.completeTokenReplacement(member) → retire()', 'anyone, once complete', 'The ledger swaps the member’s token and retires the old one for good.']
+  ]},
+  {id: 'emergency', t: 'Emergency controls', s: 'Restrictive actions take effect at once; undoing them goes through the timelock.', steps: [
+    ['suspend', ['op', 'ledger'], 'OmnibusLedger.suspend(member)', 'GUARDIAN_ROLE (fast)', 'Stops the member minting, defunding and receiving; its holders can still pay out at par. Only the governor reinstates.'],
+    ['guardMsg', ['op', 'msgH'], 'pause · lowerCorridorCap · lowerSupplyCap · disableAttester', 'PAUSER_ROLE (guardian)', 'Caps can only go down this way; raising them is timelocked.'],
+    ['pauseRouter', ['op', 'router'], 'PaymentRouter.pause()', 'PAUSER_ROLE', 'New payments stop; expiry still releases held funds.'],
+    ['pauseA', ['bankA', 'tokA'], 'BankToken.pause()', 'Bank A pauser', 'The issuing bank’s kill switch: transfers, mints, redemptions and forced transfers stop; freezes still work.']
+  ]}
+];
+
+/* ------------------------------------------------------------------ inspector */
+var INSP = {
+  ledger: {path: 'contracts/src/omnibus/OmnibusLedger.sol', what: 'The operator’s register of member positions in the joint account. Each position splits into backing (for tokens outstanding), pending defunds and free position.', state: ['position, backing, pendingDefund, remoteSupply per member', 'issuanceCap, prefundRequirement', 'omnibusTotal, undistributedInterest', 'reconciliationBreak', 'replacements (token replacement in progress)'], groups: [
+    ['slow', 'Timelock (governor)', ['admitMember', 'reinstate', 'setOperator', 'setApprover', 'registerWallet', 'setLimits', 'clearBreak', 'beginTokenReplacement', 'cancelTokenReplacement']],
+    ['fast', 'Guardian', ['suspend']],
+    ['net', 'Operator services', ['creditFunding', 'confirmDefund', 'failDefund', 'distributeInterest (funding)', 'attestFedBalance (reconciler)']],
+    ['bank', 'Member bank', ['requestDefund (gateway)', 'approveDefund (approver)', 'cancelDefund', 'setRequiresAcceptance']],
+    ['net', 'Network contracts', ['encumber / release (tokens)', 'moveBacking, settleHeldTokens (router)', 'transferFree, applyNet (netting)', 'recordRemote (messenger)', 'recordMigration (successor)']],
+    ['any', 'Anyone', ['completeTokenReplacement', 'invariantsHold (view)']]
+  ]},
+  tokA: {path: 'contracts/src/omnibus/BankToken.sol', what: 'One bank’s deposit token (ERC-20 with ERC-7943 compliance). Every mint encumbers the bank’s position; holds reserve balances for pending payments.', state: ['balances, frozen, held, totalHeld', 'blocked (lost keys)', 'policy (holder registry)', 'paused, retired', 'migrated (as a successor)'], groups: [
+    ['bank', 'Bank A', ['mint, redeemFrom (issuer)', 'setFrozenTokens, forcedTransfer, recover (compliance)', 'pause, unpause (pauser)', 'setPolicy (admin)']],
+    ['net', 'Network contracts', ['hold, releaseHold, burnHeld, routerBurn, routerMint (router)', 'messengerBurn, messengerMint (messenger)', 'retire (ledger)']],
+    ['any', 'Holders and anyone', ['transfer (admitted holders)', 'redeem', 'migrateBalances (as a successor)', 'canTransfer (view)']]
+  ]},
+  tokB: null, tokA2: null,
+  router: {path: 'contracts/src/omnibus/PaymentRouter.sol', what: 'Cross-bank payments and swaps: burn the payer’s token, move backing, mint the payee’s token, at once or after the receiving bank accepts.', state: ['payments: payer, payee, tokens, amount, deadline, status', 'acceptWindow'], groups: [
+    ['slow', 'Timelock (admin)', ['setAcceptWindow']],
+    ['fast', 'Pauser', ['pause', 'unpause']],
+    ['bank', 'Receiving bank', ['accept', 'reject']],
+    ['any', 'Anyone', ['pay (the payer)', 'expire (after the deadline, even when paused)', 'returnPayment, requestReturn', 'settleHeld (member wallets)']]
+  ]},
+  netting: {path: 'contracts/src/omnibus/OmnibusNetting.sol', what: 'Interbank obligations on free positions: settled gross at once, or in verified multilateral cycles that move only each bank’s net.', state: ['obligations: payer, payee, amount, expiry, status', 'ttl'], groups: [
+    ['slow', 'Timelock (admin)', ['setTtl']],
+    ['fast', 'Pauser', ['pause', 'unpause']],
+    ['net', 'Operator', ['settleCycle']],
+    ['bank', 'Payer’s gateway', ['submit', 'settleGross', 'cancel']],
+    ['any', 'Anyone', ['expire']]
+  ]},
+  regA: {path: 'contracts/src/omnibus/HolderRegistry.sol', what: 'A bank’s allowlist of wallets that may hold its token. Admission is the bank’s KYC decision.', state: ['authorized'], groups: [
+    ['bank', 'Bank registrar', ['authorize', 'revoke']],
+    ['net', 'Messenger (abroad)', ['revoke (broadcast from home)']]
+  ]},
+  msgH: {path: 'contracts/src/omnibus/crosschain/CrossChainMessenger.sol', what: 'Burn-and-mint messenger. At home it caps each corridor and counts supply abroad; every message needs a strict-majority attester quorum plus the issuing bank’s key.', state: ['attesters, attesterCount, threshold', 'issuerAttester per member', 'corridorCap, outstanding (home)', 'supplyCap (abroad)', 'suspense wallets', 'usedNonce'], groups: [
+    ['slow', 'Timelock (admin)', ['setAttester', 'setThreshold', 'setRemote', 'setToken', 'setIssuerAttester', 'setSuspense', 'setCorridorCap', 'setSupplyCap']],
+    ['fast', 'Guardian (pauser)', ['pause', 'unpause', 'lowerCorridorCap', 'lowerSupplyCap', 'disableAttester']],
+    ['bank', 'Bank registrar', ['sendRevocation (home only)']],
+    ['any', 'Holders and relayers', ['depositForBurn', 'depositForBurnWithHook', 'receiveMessage', 'bounce']]
+  ]},
+  msgR: null,
+  rtokA: {path: 'contracts/src/omnibus/crosschain/RemoteBankToken.sol', what: 'Bank A’s token on another chain, minted only by the messenger. It keeps the bank’s controls: holder policy, freezes, forced transfer, key recovery, pause.', state: ['balances, frozen, blocked', 'policy (the remote registry)', 'paused'], groups: [
+    ['bank', 'Bank A', ['setFrozenTokens, forcedTransfer, recover (compliance)', 'pause, unpause (pauser)', 'setPolicy (admin)']],
+    ['net', 'Messenger', ['messengerMint', 'messengerBurn']],
+    ['any', 'Admitted holders', ['transfer', 'canTransfer (view)']]
+  ]},
+  rregA: null,
+  dvp: {path: 'contracts/src/omnibus/dvp/DvPSettlement.sol', what: 'Delivery versus payment on the asset’s chain. Both parties affirm EIP-712 terms; the asset is pulled at settlement; cash can arrive from home with its instruction. No admin path to escrow.', state: ['trades: terms, status, affirmations, funders', 'escrowed, credited, credit per account'], groups: [
+    ['slow', 'Timelock (admin)', ['grant the pauser role only']],
+    ['fast', 'Pauser', ['pause', 'unpause (refunds and withdrawals still work)']],
+    ['any', 'Parties and anyone', ['affirm, affirmFor, revoke, cancel', 'fundAsset, fundCash, receiveCash', 'settle, settleMany', 'refund (after the deadline)', 'withdrawCredit, withdrawCreditHome']]
+  ]},
+  sec: {path: 'external', what: 'A tokenized security issued by its own transfer agent (for example ERC-3643 or ERC-7943). Its compliance checks the seller-to-buyer transfer; the venue needs no identity of its own.', state: [], groups: []},
+  op: {path: 'governance', what: 'The network operator. Its governor and admin roles belong to a timelock; a guardian multisig holds only restrictive powers; separate keys run funding, reconciliation and netting.', state: [], groups: [
+    ['slow', 'Timelock', ['admission, keys, limits, attesters, caps up, token replacement']],
+    ['fast', 'Guardian', ['suspend, pause, caps down, remove an attester']],
+    ['net', 'Services', ['funding, reconciler, netting operator']]
+  ]},
+  att: {path: 'off-chain', what: 'The network’s attesters. A strict majority must sign every cross-chain message, and only once its burn is final; the issuing bank’s key must sign too.', state: [], groups: []},
+  bankA: {path: 'member bank', what: 'A member bank. It issues and controls its own token: issuer, compliance, pauser and registrar keys, plus a gateway key that answers payments and a separate approver for defunds.', state: [], groups: []},
+  bankB: {path: 'member bank', what: 'Another member bank, with the same kinds of keys.', state: [], groups: []},
+  any: {path: 'anyone', what: 'Token holders pay and redeem; relayers deliver messages; anyone can expire lapsed payments, bounce undeliverable messages, migrate balances or complete a replacement once the conditions hold.', state: [], groups: []},
+  joint: {path: 'central bank', what: 'One account at the central bank holding every member’s reserves. Its balance moves only on funding, defunds and interest; the ledger’s positions always sum to it.', state: [], groups: []},
+  mA: {path: 'central bank', what: 'Bank A’s own reserve account.', state: [], groups: []},
+  mB: {path: 'central bank', what: 'Bank B’s own reserve account.', state: [], groups: []}
+};
+INSP.tokB = INSP.tokA; INSP.tokA2 = INSP.tokA; INSP.msgR = INSP.msgH; INSP.rregA = INSP.regA;
+
+/* ------------------------------------------------------------------ roles table */
+var ROLES = [
+  ['Operator timelock', 'slow', 'Governor and every admin', ['admitMember', 'reinstate', 'setLimits', 'setAttester', 'setThreshold', 'setCorridorCap', 'setIssuerAttester', 'beginTokenReplacement', 'accept admin handovers']],
+  ['Guardian', 'fast', 'Restrictive only', ['suspend', 'pause', 'lowerCorridorCap', 'lowerSupplyCap', 'disableAttester']],
+  ['Funding service', 'net', 'FUNDING_ROLE', ['creditFunding', 'confirmDefund', 'failDefund', 'distributeInterest']],
+  ['Reconciler', 'net', 'RECONCILER_ROLE', ['attestFedBalance']],
+  ['Netting operator', 'net', 'OPERATOR_ROLE', ['settleCycle']],
+  ['Network attesters', 'net', 'strict-majority quorum', ['sign cross-chain messages once final']],
+  ['Bank issuer', 'bank', 'ISSUER_ROLE + issuer attestation key', ['mint', 'redeemFrom', 'co-sign every mint abroad']],
+  ['Bank compliance', 'bank', 'COMPLIANCE_ROLE', ['setFrozenTokens', 'forcedTransfer', 'recover']],
+  ['Bank pauser', 'fast', 'PAUSER_ROLE on its token', ['pause', 'unpause']],
+  ['Bank registrar', 'bank', 'REGISTRAR_ROLE', ['authorize', 'revoke', 'sendRevocation']],
+  ['Bank gateway', 'bank', 'member operator key', ['accept', 'reject', 'requestDefund', 'submit', 'setRequiresAcceptance']],
+  ['Bank approver', 'bank', 'member approver key', ['approveDefund']],
+  ['Anyone', 'any', 'no role', ['pay', 'redeem', 'expire', 'bounce', 'receiveMessage', 'migrateBalances', 'completeTokenReplacement', 'refund']]
+];
+var SPEED = {slow: 'timelock', fast: 'fast', net: 'service', bank: 'bank', any: 'open'};
+
+/* ------------------------------------------------------------------ invariants */
+var INV = [
+  ['backing = home supply + remote supply', 'Every token, at home or abroad, is backed by its bank’s position; tokens in flight stay counted abroad.', 'OmnibusLedger.invariantsHold, encumber, release, recordRemote', 'OmnibusInvariants, NetworkInvariants (fuzzed)'],
+  ['Σ positions = joint-account balance', 'The ledger always sums to the central-bank statement; a mismatch halts minting and defunds but not payments.', 'attestFedBalance, reconciliationBreak', 'OmnibusInvariants, NetworkInvariants'],
+  ['backing + pending defunds ≤ position', 'No member ever has credit: nothing mints, defunds or nets beyond free position.', 'encumber, requestDefund, applyNet', 'NetworkInvariants (NoCreditAnywhere)'],
+  ['abroad ≤ corridor cap, supply ≤ chain cap', 'Home refuses to send past a corridor’s cap or take back more than it sent; each chain caps its own supply.', 'CrossChainMessenger caps, CorridorUnderflow', 'CrossChain, NetworkInvariants (corridor count)'],
+  ['every mint abroad = majority + issuer key', 'A minority of attesters, or network keys without the bank\u2019s own key, can never create a bank’s deposits.', '_checkThreshold, _open', 'CrossChain'],
+  ['both legs or neither', 'A DvP trade settles atomically; the venue holds exactly its escrow plus credits.', 'DvPSettlement._settle, _moveLeg', 'DvP, DvPInvariants (fuzzed)'],
+  ['successor supply = old supply before the swap', 'A replaced token’s balances are re-created exactly, and the old token is retired for good.', 'recordMigration, completeTokenReplacement', 'ReplaceToken (incl. fuzz)'],
+  ['the deployer ends with no role', 'Every admin is handed to governance and verified.', 'script/VerifyRoles.s.sol', 'Deploy']
+];
+
+/* ================================================================== build */
+var zones = $('zones'), edgesG = $('edges'), nodesG = $('nodes');
+ZONES.forEach(function (z) {
+  el('rect', {'class': 'zone ' + z.cls, x: z.x, y: z.y, width: z.w, height: z.h, rx: 12}, zones);
+  var t = el('text', {'class': 'band-l', x: z.x + 12, y: z.y + (z.cls === 'off' ? 16 : 18), fill: z.col}, zones);
+  t.textContent = z.label;
+});
+
+function center(n) { return {x: n.x + n.w / 2, y: n.y + n.h / 2}; }
+function clip(n, from, to) { // point where the segment from->to leaves rect n (from = centre of n)
+  var dx = to.x - from.x, dy = to.y - from.y;
+  var sx = dx === 0 ? Infinity : (n.w / 2 + 4) / Math.abs(dx);
+  var sy = dy === 0 ? Infinity : (n.h / 2 + 4) / Math.abs(dy);
+  var s = Math.min(sx, sy);
+  return {x: from.x + dx * s, y: from.y + dy * s};
+}
+var EDGE_EL = {};
+E.forEach(function (e) {
+  var a = N[e[1]], b = N[e[2]], ca = center(a), cb = center(b);
+  var p1 = clip(a, ca, cb), p2 = clip(b, cb, ca);
+  var mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+  var dx = p2.x - p1.x, dy = p2.y - p1.y, len = Math.hypot(dx, dy) || 1;
+  var bend = e[6] || 0, cx = mx - dy / len * bend, cy = my + dx / len * bend;
+  var g = el('g', {'class': 'edge ' + e[4] + (e[5] ? ' base' : ' dim'), 'data-id': e[0]}, edgesG);
+  var d = 'M' + p1.x.toFixed(1) + ' ' + p1.y.toFixed(1) + ' Q' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ' ' + p2.x.toFixed(1) + ' ' + p2.y.toFixed(1);
+  var path = el('path', {d: d, 'marker-end': e[4] === 'money' ? 'url(#ah-money)' : 'url(#ah)'}, g);
+  var lx = 0.25 * p1.x + 0.5 * cx + 0.25 * p2.x, ly = 0.25 * p1.y + 0.5 * cy + 0.25 * p2.y;
+  var t = el('text', {x: lx.toFixed(1), y: (ly - 4).toFixed(1), 'text-anchor': 'middle'}, g);
+  t.textContent = e[3];
+  EDGE_EL[e[0]] = {g: g, path: path, kind: e[4], base: e[5]};
+});
+
+var NODE_EL = {};
+Object.keys(N).forEach(function (id) {
+  var n = N[id];
+  var g = el('g', {'class': 'node ' + n.kind, 'data-id': id, tabindex: 0, role: 'button', 'aria-label': n.t}, nodesG);
+  el('rect', {'class': 'box', x: n.x, y: n.y, width: n.w, height: n.h, rx: 8}, g);
+  el('rect', {'class': 'tagbar', x: n.x, y: n.y + 6, width: 4, height: n.h - 12, rx: 2, fill: n.tone}, g);
+  var t1 = el('text', {'class': 'n1', x: n.x + 14, y: n.y + (n.h > 60 ? 26 : 24)}, g); t1.textContent = n.t;
+  var t2 = el('text', {'class': 'n2', x: n.x + 14, y: n.y + (n.h > 60 ? 44 : 40)}, g); t2.textContent = n.s;
+  if (id === 'ledger') {
+    var t3 = el('text', {'class': 'n2', x: n.x + 14, y: n.y + 62}, g); t3.textContent = 'backing + pending + free';
+    var t4 = el('text', {'class': 'n2', x: n.x + 14, y: n.y + 78}, g); t4.textContent = 'backing = all supply';
+  }
+  [t1, t2].forEach(function (t) { var max = n.w - 22; if (t.getComputedTextLength && t.getComputedTextLength() > max) { t.setAttribute('textLength', max); t.setAttribute('lengthAdjust', 'spacingAndGlyphs'); } });
+  g.addEventListener('click', function () { inspect(id); });
+  g.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); inspect(id); } });
+  NODE_EL[id] = g;
+});
+
+/* ------------------------------------------------------------------ inspector */
+function chipFor(k) { var c = document.createElement('span'); c.className = 'chip ' + k; c.textContent = SPEED[k]; return c; }
+function inspect(id) {
+  Object.keys(NODE_EL).forEach(function (k) { NODE_EL[k].classList.toggle('sel', k === id); });
+  var d = INSP[id], n = N[id], p = $('pane-contract');
+  p.innerHTML = '';
+  var h = document.createElement('h3'); h.textContent = n.t; p.appendChild(h);
+  var path = document.createElement('div'); path.className = 'path'; path.textContent = d.path; p.appendChild(path);
+  var w = document.createElement('p'); w.className = 'what'; w.textContent = d.what; p.appendChild(w);
+  if (d.state.length) {
+    var st = document.createElement('div'); st.className = 'state';
+    var sh = document.createElement('div'); sh.className = 'grp-h'; sh.textContent = 'State'; st.appendChild(sh);
+    d.state.forEach(function (s) { var c = document.createElement('code'); c.textContent = s; st.appendChild(c); });
+    p.appendChild(st);
+  }
+  d.groups.forEach(function (gr) {
+    var box = document.createElement('div'); box.className = 'grp';
+    var hh = document.createElement('div'); hh.className = 'grp-h'; hh.appendChild(chipFor(gr[0]));
+    var lab = document.createElement('span'); lab.textContent = gr[1]; hh.appendChild(lab); box.appendChild(hh);
+    var fns = document.createElement('div'); fns.className = 'fns';
+    gr[2].forEach(function (f) { var c = document.createElement('code'); c.textContent = f; fns.appendChild(c); });
+    box.appendChild(fns); p.appendChild(box);
+  });
+}
+
+/* ------------------------------------------------------------------ flows */
+var flowsNav = $('flows'), cur = null, step = 0, timer = null, dotAnim = null;
+FLOWS.forEach(function (f) {
+  var b = document.createElement('button'); b.type = 'button'; b.textContent = f.t; b.setAttribute('aria-pressed', 'false');
+  b.addEventListener('click', function () { stop(); load(f.id, 0); });
+  flowsNav.appendChild(b); f.btn = b;
+});
+function flow(id) { for (var i = 0; i < FLOWS.length; i++) if (FLOWS[i].id === id) return FLOWS[i]; return FLOWS[0]; }
+
+function load(id, s) {
+  cur = flow(id);
+  FLOWS.forEach(function (f) { f.btn.setAttribute('aria-pressed', f === cur ? 'true' : 'false'); });
+  $('f-title').textContent = cur.t; $('f-sum').textContent = cur.s;
+  var ol = $('steps'); ol.innerHTML = '';
+  cur.steps.forEach(function (st, i) {
+    var li = document.createElement('li'); var b = document.createElement('button'); b.type = 'button';
+    var h = document.createElement('div'); h.className = 'st-h';
+    var n = document.createElement('span'); n.className = 'st-n'; n.textContent = (i + 1) + '.'; h.appendChild(n);
+    var fn = document.createElement('span'); fn.className = 'st-fn'; fn.textContent = st[2]; h.appendChild(fn);
+    b.appendChild(h);
+    var g = document.createElement('div'); g.className = 'st-n'; g.textContent = st[3]; b.appendChild(g);
+    var t = document.createElement('div'); t.className = 'st-t'; t.textContent = st[4]; b.appendChild(t);
+    b.addEventListener('click', function () { stop(); go(i); });
+    li.appendChild(b); ol.appendChild(li);
+  });
+  NODE_EL.tokA2.classList.toggle('show', id === 'replace');
+  try { history.replaceState(null, '', '#' + id); } catch (e) {}
+  go(s || 0);
+}
+
+function go(i) {
+  step = Math.max(0, Math.min(cur.steps.length - 1, i));
+  var used = {}, doneE = {};
+  cur.steps.forEach(function (st, j) { if (st[0]) { used[st[0]] = true; if (j < step) doneE[st[0]] = true; } });
+  var now = cur.steps[step];
+  Object.keys(EDGE_EL).forEach(function (id) {
+    var e = EDGE_EL[id], cls = 'edge ' + e.kind;
+    if (id === now[0]) cls += ' now';
+    else if (doneE[id]) cls += ' done';
+    else if (used[id]) cls += ' inflow';
+    else cls += e.base ? ' base' : ' dim';
+    e.g.setAttribute('class', cls);
+    e.path.setAttribute('marker-end', id === now[0] ? 'url(#ah-hot)' : (e.kind === 'money' ? 'url(#ah-money)' : 'url(#ah)'));
+  });
+  Object.keys(NODE_EL).forEach(function (k) { NODE_EL[k].classList.toggle('on', now[1].indexOf(k) >= 0); });
+  var items = $('steps').querySelectorAll('li button');
+  items.forEach(function (b, j) { if (j === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
+  $('b-prev').disabled = step === 0; $('b-next').disabled = step === cur.steps.length - 1;
+  runDot(now[0]);
+}
+
+function runDot(eid) {
+  if (dotAnim) cancelAnimationFrame(dotAnim);
+  var dot = $('dot');
+  if (!eid || reduce) { dot.setAttribute('cx', -20); dot.setAttribute('cy', -20); return; }
+  var p = EDGE_EL[eid].path, L = p.getTotalLength(), t0 = null, dur = 900;
+  function f(ts) {
+    if (t0 === null) t0 = ts;
+    var k = Math.min(1, (ts - t0) / dur), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    var pt = p.getPointAtLength(L * e);
+    dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y);
+    if (k < 1) dotAnim = requestAnimationFrame(f);
+  }
+  dotAnim = requestAnimationFrame(f);
+}
+
+function play() {
+  if (timer) { stop(); return; }
+  $('b-play').textContent = 'Pause';
+  if (step >= cur.steps.length - 1) go(0);
+  timer = setInterval(function () {
+    if (step >= cur.steps.length - 1) { stop(); return; }
+    go(step + 1);
+  }, reduce ? 2600 : 1900);
+}
+function stop() { if (timer) clearInterval(timer); timer = null; $('b-play').textContent = 'Play'; }
+$('b-play').addEventListener('click', play);
+$('b-prev').addEventListener('click', function () { stop(); go(step - 1); });
+$('b-next').addEventListener('click', function () { stop(); go(step + 1); });
+document.addEventListener('keydown', function (ev) {
+  var tg = (ev.target.tagName || '').toLowerCase();
+  if (tg === 'button' || ev.target.getAttribute && ev.target.getAttribute('role') === 'button') return;
+  if (ev.key === 'ArrowRight') { stop(); go(step + 1); }
+  else if (ev.key === 'ArrowLeft') { stop(); go(step - 1); }
+  else if (ev.key === ' ') { ev.preventDefault(); play(); }
+});
+
+/* ------------------------------------------------------------------ lower sections */
+var rt = $('roles');
+var thead = document.createElement('tr');
+['Who', 'Speed', 'Holds', 'Can call'].forEach(function (h) { var th = document.createElement('th'); th.textContent = h; thead.appendChild(th); });
+rt.appendChild(thead);
+ROLES.forEach(function (r) {
+  var tr = document.createElement('tr');
+  var a = document.createElement('td'); a.textContent = r[0]; a.style.fontWeight = '600'; tr.appendChild(a);
+  var b = document.createElement('td'); b.appendChild(chipFor(r[1])); tr.appendChild(b);
+  var c = document.createElement('td'); c.textContent = r[2]; tr.appendChild(c);
+  var d = document.createElement('td'); var fns = document.createElement('div'); fns.className = 'fns';
+  r[3].forEach(function (f) { var k = document.createElement('code'); k.textContent = f; fns.appendChild(k); });
+  d.appendChild(fns); tr.appendChild(d); rt.appendChild(tr);
+});
+var inv = $('inv');
+INV.forEach(function (x) {
+  var a = document.createElement('article');
+  var r = document.createElement('div'); r.className = 'rule'; r.textContent = x[0]; a.appendChild(r);
+  var p = document.createElement('p'); p.textContent = x[1]; a.appendChild(p);
+  var w = document.createElement('div'); w.className = 'where'; w.textContent = 'Enforced in ' + x[2] + ' · pinned by ' + x[3]; a.appendChild(w);
+  inv.appendChild(a);
+});
+
+/* ------------------------------------------------------------------ start */
+var h = (location.hash || '').replace('#', '');
+load(FLOWS.some(function (f) { return f.id === h; }) ? h : 'payment', 0);
+inspect('ledger');
+})();
+</script>

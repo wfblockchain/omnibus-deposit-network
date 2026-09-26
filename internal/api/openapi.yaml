@@ -1,0 +1,401 @@
+openapi: 3.1.0
+info:
+  title: the omnibus network — bank and client API
+  version: 1.0.0
+  description: |
+    The web2 interface to a the network on which member banks issue their own
+    tokenized deposits against one joint account at the Federal Reserve Bank of
+    New York.
+
+    Corporate clients see deposit accounts and payment orders only. A payment
+    order with priority URGENT settles instantly, 24x7 and above RTP's $10M
+    limit, as tokenized deposits moved across the network; NORMAL orders are
+    funded from the deposit account and settle in the operator's next netting cycle.
+
+    Every payment carries an ISO 20022 pain.002-style status (RCVD, ACTC, PATC,
+    ACCP, PDNG, ACSP, ACSC, ACCC, RJCT, CANC, BLCK), a UETR, the client's
+    endToEndId and, when rejected, an ISO reason code (AC04 closed account,
+    AM04 insufficient funds, RR04 regulatory, DU04 duplicate).
+
+    Status changes are pushed to registered webhooks as CloudEvents 1.0,
+    signed per Standard Webhooks (webhook-id, webhook-timestamp,
+    webhook-signature: v1,<base64 HMAC-SHA256 of "id.timestamp.body">),
+    delivered at least once, in order per endpoint, retried with backoff.
+
+    Every response carries a Request-Id header: the caller's own, or one
+    assigned.
+
+    Authentication: bearer tokens. In production these are OAuth2
+    client-credentials tokens over mTLS; the demo issues static tokens per user.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearer: []
+tags:
+  - name: Corporate
+    description: For a corporate client's treasury (roles maker, approver, viewer)
+  - name: Bank operations
+    description: For a member bank's compliance and treasury staff
+  - name: operator operations
+    description: For the network operations
+paths:
+  /api/v1/me:
+    get:
+      summary: The authenticated person and role
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Principal" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/account:
+    get:
+      tags: [Corporate]
+      summary: The organization's deposit account
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Account" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/account/statement:
+    get:
+      tags: [Corporate]
+      summary: Postings on the deposit account (camt.053 entries)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries: { type: array, items: { $ref: "#/components/schemas/StatementLine" } }
+  /api/v1/payments:
+    get:
+      tags: [Corporate]
+      summary: Payment orders visible to the caller
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payments: { type: array, items: { $ref: "#/components/schemas/Payment" } }
+    post:
+      tags: [Corporate]
+      summary: Create a payment order (maker)
+      description: |
+        Validates against the organization's per-payment and daily limits,
+        checks the payee with the receiving bank (account open, name match)
+        and waits for approval by someone other than the maker. Above the
+        organization's threshold two approvers are needed, and a failed payee
+        check needs one more to override it.
+
+        Retrying with the same Idempotency-Key and the same body returns the
+        original order with 200; the same key with a different body is a 422
+        (as the IETF Idempotency-Key draft specifies). An endToEndId already
+        used by the organization is a 409 with reason DU04.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaymentRequest" }
+            example:
+              creditor: { name: Contoso Ltd, routingNumber: "234567898", account: B-4000001 }
+              amount: "25000000.00"
+              priority: URGENT
+              remittance: INV-88213
+              endToEndId: NW-2026-10-03-0001
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Payment" } } } }
+        "200": { description: Replay of an earlier request with the same key, content: { application/json: { schema: { $ref: "#/components/schemas/Payment" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Invalid" }
+  /api/v1/payments/{id}:
+    get:
+      tags: [Corporate]
+      summary: One payment order with its full audit trail
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Payment" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/payments/{id}/approve:
+    post:
+      tags: [Corporate]
+      summary: Approve (approver; never the maker)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Payment" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/payments/{id}/decline:
+    post:
+      tags: [Corporate]
+      summary: Decline (approver)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { reason: { type: string } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Payment" } } } }
+  /api/v1/payments/{id}/cancel:
+    post:
+      tags: [Corporate]
+      summary: Cancel an order not yet approved (its maker), or pull a NORMAL order from the netting queue before its cycle (maker or approver)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Payment" } } } }
+  /api/v1/payees/verify:
+    post:
+      tags: [Corporate]
+      summary: Check a payee before paying (account status and name match, from the receiving bank's records)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Party" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PayeeCheck" } } } }
+        "422": { $ref: "#/components/responses/Invalid" }
+  /api/v1/network/participants:
+    get:
+      tags: [Corporate]
+      summary: The banks on the network and whether each is live
+      responses:
+        "200": { description: OK }
+  /api/v1/webhooks:
+    get:
+      tags: [Corporate]
+      summary: The organization's webhook endpoints (approver)
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Corporate]
+      summary: Register an https endpoint for payment status events (approver); the secret is returned once
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [url], properties: { url: { type: string, format: uri } } } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Webhook" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Invalid" }
+  /api/v1/webhooks/{id}:
+    delete:
+      tags: [Corporate]
+      summary: Remove an endpoint
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "204": { description: Removed }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/webhooks/{id}/deliveries:
+    get:
+      tags: [Corporate]
+      summary: Delivery log for an endpoint (attempts, last response, next retry)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: OK }
+  /api/v1/ops/payments:
+    get:
+      tags: [Bank operations]
+      summary: The bank's clients' payment orders
+      responses:
+        "200": { description: OK }
+  /api/v1/ops/holds:
+    get:
+      tags: [Bank operations]
+      summary: Orders held for sanctions review, and blocked or rejected cases with their OFAC report dates (compliance)
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/ops/holds/{id}/release:
+    post:
+      tags: [Bank operations]
+      summary: Release a hold after review; the order executes
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { note: { type: string } } } } } }
+      responses:
+        "200": { description: OK }
+  /api/v1/ops/holds/{id}/block:
+    post:
+      tags: [Bank operations]
+      summary: A sanctioned party has an interest in the funds; they move to the blocked account (BLCK) and an OFAC report falls due in 10 business days (31 CFR 501.603)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { note: { type: string } } } } } }
+      responses:
+        "200": { description: OK }
+  /api/v1/ops/holds/{id}/reject:
+    post:
+      tags: [Bank operations]
+      summary: Prohibited but no sanctioned party has an interest; rejected RR04, nothing moves, reported in 10 business days (31 CFR 501.604)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: OK }
+  /api/v1/ops/liquidity:
+    get:
+      tags: [Bank operations]
+      summary: The bank's omnibus position, mint capacity, alerts and waiting orders
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Liquidity" } } } }
+  /api/v1/ops/funding:
+    post:
+      tags: [Bank operations]
+      summary: Fund the omnibus (treasury); Fedwire BTRC while open, FedNow LMT while closed
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AmountBody" } } } }
+      responses:
+        "200": { description: The Fed's answer and how many waiting orders proceeded }
+  /api/v1/ops/defunds:
+    post:
+      tags: [Bank operations]
+      summary: Request free position back to the master account (treasury; maker)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AmountBody" } } } }
+      responses:
+        "201": { description: Created }
+  /api/v1/ops/defunds/{id}/approve:
+    post:
+      tags: [Bank operations]
+      summary: Approve a defund (treasury approver; never the requester)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: OK }
+  /api/v1/operator/network:
+    get:
+      tags: [operator operations]
+      summary: Member positions, the Fed joint account, reconciliation and netting
+      responses:
+        "200": { description: OK }
+  /api/v1/operator/netting/run:
+    post:
+      tags: [operator operations]
+      summary: Plan and settle a netting cycle now
+      responses:
+        "200": { description: The cycle report (gross, net, deferred) }
+  /api/v1/operator/reconcile:
+    post:
+      tags: [operator operations]
+      summary: Attest the Fed's camt.052 balance for the joint account
+      responses:
+        "200": { description: The reconciliation result }
+  /api/v1/operator/clock:
+    post:
+      tags: [operator operations]
+      summary: Demo only — move the scenario clock (and the chain's) forward
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { time: { type: string, format: date-time } } } } }
+      responses:
+        "200": { description: OK }
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer }
+  parameters:
+    id: { in: path, name: id, required: true, schema: { type: string } }
+  responses:
+    Unauthorized: { description: Missing or unknown token, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    Forbidden: { description: The caller's role may not do this, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    NotFound: { description: No such resource visible to the caller, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    Conflict: { description: The resource is not in a state that allows this, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    Invalid: { description: Validation or limit failure, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    BadRequest: { description: Malformed request, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  schemas:
+    Error:
+      type: object
+      properties: { error: { type: string }, message: { type: string } }
+    Principal:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        role: { type: string, enum: [maker, approver, viewer, compliance, treasury, treasury-approver, operator-ops] }
+        bank: { type: string }
+        org: { type: string }
+    Account:
+      type: object
+      properties:
+        org: { type: string }
+        account: { type: string }
+        bankName: { type: string }
+        routingNumber: { type: string }
+        balance: { type: string, example: "125000000.00" }
+        currency: { type: string, example: USD }
+        inFlight: { type: string, description: Debited for payments not yet settled }
+        asOf: { type: string, format: date-time }
+    StatementLine:
+      type: object
+      properties:
+        bookingDate: { type: string, format: date-time }
+        reference: { type: string }
+        credit: { type: boolean }
+        amount: { type: string }
+        balance: { type: string }
+    Party:
+      type: object
+      required: [name, routingNumber, account]
+      properties:
+        name: { type: string }
+        routingNumber: { type: string }
+        account: { type: string }
+    PaymentRequest:
+      type: object
+      required: [creditor, amount]
+      properties:
+        debtorAccount: { type: string, description: Defaults to the organization's account }
+        creditor: { $ref: "#/components/schemas/Party" }
+        amount: { type: string, description: Dollars with at most two decimals }
+        priority: { type: string, enum: [URGENT, NORMAL], default: NORMAL }
+        remittance: { type: string }
+        endToEndId: { type: string, maxLength: 35, description: The client's reference, unique per organization; defaults to the order id }
+    PayeeCheck:
+      type: object
+      properties:
+        accountStatus: { type: string, enum: [OPEN, CLOSED, NOT_FOUND] }
+        nameMatch: { type: string, enum: [MATCH, CLOSE_MATCH, NO_MATCH] }
+        registeredName: { type: string, description: Returned on a close match only }
+    Webhook:
+      type: object
+      properties:
+        id: { type: string }
+        url: { type: string }
+        secret: { type: string, description: "whsec_…; returned only when created" }
+        createdAt: { type: string, format: date-time }
+    Event:
+      type: object
+      properties:
+        at: { type: string, format: date-time }
+        actor: { type: string }
+        status: { type: string }
+        iso: { type: string }
+        note: { type: string }
+        detail: { type: string, description: Bank and operator staff only; never returned to clients }
+    Payment:
+      type: object
+      properties:
+        id: { type: string }
+        idempotencyKey: { type: string }
+        endToEndId: { type: string }
+        uetr: { type: string, format: uuid }
+        debtorAccount: { type: string }
+        creditor: { $ref: "#/components/schemas/Party" }
+        amount: { type: string }
+        priority: { type: string, enum: [URGENT, NORMAL] }
+        status:
+          type: string
+          enum: [AWAITING_APPROVAL, IN_PROCESS, ON_HOLD, AWAITING_LIQUIDITY, PENDING_RECEIVER, QUEUED_FOR_NETTING, SETTLED, REJECTED, CANCELLED, EXPIRED, BLOCKED]
+        isoStatus: { type: string, enum: [RCVD, ACTC, PATC, ACCP, PDNG, ACSP, ACSC, ACCC, RJCT, CANC, BLCK] }
+        payeeCheck: { $ref: "#/components/schemas/PayeeCheck" }
+        ofacReportDue: { type: string, format: date-time, description: Set when compliance blocks or rejects on sanctions grounds }
+        reasonCode: { type: string }
+        route: { type: string, enum: ["on-network instant, 24x7", "network netting cycle", "book transfer, same bank"] }
+        routeNote: { type: string }
+        approvals: { type: array, items: { type: string } }
+        history: { type: array, items: { $ref: "#/components/schemas/Event" } }
+    Liquidity:
+      type: object
+      properties:
+        position: { type: string }
+        backing: { type: string }
+        free: { type: string }
+        mintCapacity: { type: string }
+        fedwireOpen: { type: boolean }
+        fundingInstrument: { type: string }
+        awaitingLiquidity: { type: array, items: { $ref: "#/components/schemas/Payment" } }
+    AmountBody:
+      type: object
+      required: [amount]
+      properties: { amount: { type: string, example: "10000000.00" } }
