@@ -70,7 +70,7 @@ func Build(ctx context.Context, rpc, artifacts string, log operator.Logger) (*St
 		{MemberID: BankB, Name: "Bank B", Ticker: "B-dT", ABA: BankBABA, MasterAccount: "FRB-MASTER-" + BankBABA, RequiresAcceptance: true},
 		{MemberID: BankC, Name: "Bank C", Ticker: "C-dT", ABA: BankCABA, MasterAccount: "FRB-MASTER-" + BankCABA},
 	}
-	tchKeys, err := omnibus.NewOperatorKeys()
+	opKeys, err := omnibus.NewOperatorKeys()
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func Build(ctx context.Context, rpc, artifacts string, log operator.Logger) (*St
 			return nil, err
 		}
 	}
-	net, err := omnibus.Deploy(ctx, c, tchKeys, specs, keys)
+	net, err := omnibus.Deploy(ctx, c, opKeys, specs, keys)
 	if err != nil {
 		return nil, fmt.Errorf("deploy: %w", err)
 	}

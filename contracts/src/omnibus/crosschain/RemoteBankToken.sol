@@ -12,7 +12,8 @@ import { IBurnMintToken } from "./IBurnMintToken.sol";
 /**
  * @title RemoteBankToken — a member's tokenized deposit on another chain
  * @notice Natively issued on the remote chain, but only by the messenger, on
- *         an attested burn from home; burned only when leaving. Its reserves
+ *         an attested move from home; burned only when leaving, once its
+ *         mint at home is proven. Its reserves
  *         stay in the operator's joint account and are counted on the home ledger as
  *         the member's remote supply.
  *
@@ -37,7 +38,8 @@ contract RemoteBankToken is ERC20, AccessControlDefaultAdminRules, Pausable, IER
     /// @notice The issuing bank's emergency stop on this chain: no transfer,
     ///         mint, burn, forced transfer or recovery while paused; freezing
     ///         still works.
-    ///         Messages for a paused token wait; they are not bounced.
+    ///         Messages for a paused token wait; they are cancelled only once
+    ///         their deadline passes.
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     address public immutable MESSENGER;
@@ -53,6 +55,7 @@ contract RemoteBankToken is ERC20, AccessControlDefaultAdminRules, Pausable, IER
     error OnlyMessenger(address caller);
     error ZeroAddress();
     error SelfTransfer();
+    error EscrowAccount(address account);
 
     /// @param admin the issuing bank's governance; it can replace the holder
     ///        policy, so its handover is two-step and delayed.
@@ -77,18 +80,42 @@ contract RemoteBankToken is ERC20, AccessControlDefaultAdminRules, Pausable, IER
                                     Messenger legs
     //////////////////////////////////////////////////////////////////////////*/
 
-    /// @notice Burns a holder's tokens leaving for home. The messenger calls
-    ///         it only for the sender that called it. Burns respect freezes.
-    function messengerBurn(address from, uint256 amount) external {
-        if (msg.sender != MESSENGER) revert OnlyMessenger(msg.sender);
+    /// @notice Escrows a holder's tokens leaving for home. The messenger
+    ///         calls it only for the sender that called it. Locks respect
+    ///         freezes. The escrow is the messenger's balance, reachable only
+    ///         through these legs.
+    function messengerLock(address from, uint256 amount) external {
+        _onlyMessenger();
+        _requireNotPaused();
         if (!canSend(from)) revert ERC7943CannotSend(from);
-        _burn(from, amount);
+        uint256 u = unfrozenBalanceOf(from);
+        if (amount > u) revert ERC7943InsufficientUnfrozenBalance(from, amount, u);
+        super._update(from, MESSENGER, amount);
+    }
+
+    /// @notice Burns escrow whose mint at home is proven.
+    function messengerBurnLocked(uint256 amount) external {
+        _onlyMessenger();
+        _requireNotPaused();
+        super._update(MESSENGER, address(0), amount);
+    }
+
+    /// @notice Returns escrow of a cancelled move to an admitted holder.
+    function messengerUnlock(address to, uint256 amount) external {
+        _onlyMessenger();
+        _requireNotPaused();
+        if (!canReceive(to)) revert ERC7943CannotReceive(to);
+        super._update(MESSENGER, to, amount);
+    }
+
+    function _onlyMessenger() internal view {
+        if (msg.sender != MESSENGER) revert OnlyMessenger(msg.sender);
     }
 
     /// @notice Mints on an attested burn at home. The receiver must be
     ///         admitted here, or the message cannot be delivered.
     function messengerMint(address to, uint256 amount) external {
-        if (msg.sender != MESSENGER) revert OnlyMessenger(msg.sender);
+        _onlyMessenger();
         _mint(to, amount);
     }
 
@@ -96,12 +123,14 @@ contract RemoteBankToken is ERC20, AccessControlDefaultAdminRules, Pausable, IER
                                 ERC-7943 surface
     //////////////////////////////////////////////////////////////////////////*/
 
+    /// @notice The bank's admitted holders here; never the messenger, whose
+    ///         escrow is not a holding.
     function canSend(address account) public view returns (bool) {
-        return !blocked[account] && policy.isAuthorized(account);
+        return !blocked[account] && account != MESSENGER && policy.isAuthorized(account);
     }
 
     function canReceive(address account) public view returns (bool) {
-        return !blocked[account] && policy.isAuthorized(account);
+        return !blocked[account] && account != MESSENGER && policy.isAuthorized(account);
     }
 
     function canTransfer(address from, address to, uint256 amount) external view returns (bool) {
@@ -120,6 +149,7 @@ contract RemoteBankToken is ERC20, AccessControlDefaultAdminRules, Pausable, IER
 
     function setFrozenTokens(address account, uint256 amount) external onlyRole(COMPLIANCE_ROLE) returns (bool) {
         if (account == address(0)) revert ZeroAddress();
+        if (account == MESSENGER) revert EscrowAccount(account);
         _frozen[account] = amount;
         emit Frozen(account, amount);
         return true;
@@ -135,6 +165,7 @@ contract RemoteBankToken is ERC20, AccessControlDefaultAdminRules, Pausable, IER
     {
         if (from == address(0) || to == address(0)) revert ZeroAddress();
         if (from == to) revert SelfTransfer();
+        if (from == MESSENGER) revert EscrowAccount(from);
         if (!canReceive(to)) revert ERC7943CannotReceive(to);
         uint256 u = unfrozenBalanceOf(from);
         if (amount > u) {
@@ -156,6 +187,7 @@ contract RemoteBankToken is ERC20, AccessControlDefaultAdminRules, Pausable, IER
     {
         if (lost == address(0) || replacement == address(0)) revert ZeroAddress();
         if (lost == replacement) revert SelfTransfer();
+        if (lost == MESSENGER) revert EscrowAccount(lost);
         if (!canReceive(replacement)) revert ERC7943CannotReceive(replacement);
         uint256 f = _frozen[lost];
         if (f != 0) {

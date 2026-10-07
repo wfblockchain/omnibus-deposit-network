@@ -12,7 +12,7 @@ any power over it.
 | OmnibusLedger | `GUARDIAN_ROLE`: suspend a member | `GOVERNOR_ROLE`: admit, reinstate, change operator/approver, limits, wallets | The operator timelock |
 | PaymentRouter | `PAUSER_ROLE`: pause payments (expiry still works) | window and role changes | The operator timelock |
 | OmnibusNetting | `PAUSER_ROLE` | operator changes | The operator timelock |
-| CrossChainMessenger | `PAUSER_ROLE` (guardian): pause, lower a corridor or supply cap, disable an attester | add attesters, raise threshold or caps, issuer keys, remotes, tokens, suspense wallets | The operator timelock |
+| CrossChainMessenger | `PAUSER_ROLE` (guardian): pause, lower a corridor or supply cap, lower an inbound rate limit, disable an attester | add attesters, raise threshold, caps or rate limits, issuer keys, remotes, tokens, suspense wallets, the move timeout | The operator timelock |
 | BankToken / RemoteBankToken | `PAUSER_ROLE` (the bank): stop everything, forced transfers included; `COMPLIANCE_ROLE`: freeze (works while paused), forced transfer, recovery | holder policy replacement | the bank's own governance |
 | HolderRegistry | the bank's registrar admits and revokes; home broadcasts revocations to other chains | | the bank's own governance |
 | DvPSettlement | `PAUSER_ROLE`: stop matching, funding and settlement (refunds and withdrawals still work) | nothing else: no path to escrowed funds | The operator timelock |
@@ -41,12 +41,30 @@ fix makes them revert. Freezing, which only restricts, keeps working.
   than their number. Raise it before adding an attester, lower it before
   removing one; the guardian can remove a suspect attester at once within
   these rules.
-- **Caps:** per corridor at home, per member supply on each other chain.
-- **Undeliverable transfers** (recipient not admitted, token unknown) are
-  bounced by anyone with the original attestations; the nonce is spent and a
-  RETURN re-mints at the source. A RETURN nobody can hold lands in the bank's
-  suspense wallet on that chain. A paused token makes a message wait; it is not
-  a reason to bounce.
+- **Caps:** per corridor at home (minted plus pending moves), per member
+  supply on each other chain.
+- **Inbound rate limit** on every receiving chain, per source chain and
+  member: a bucket of `capacity` refilling over `window`
+  (`setRateLimit`, timelock; `lowerRateLimit`, guardian, smaller or slower
+  only). Unset means closed, so opening a corridor needs a bucket on both
+  sides. Size it to what the bank accepts losing per window if every key on a
+  message were compromised. A mint or a cancelled-escrow release over the
+  bucket reverts and is retried later; relayers retry rather than drop.
+- **Lock, mint, then burn.** A move locks the sender's tokens in the source
+  messenger's escrow with a deadline (`moveTimeout`, default 1 day, 10 minutes
+  to 30 days). The destination's MINT_ACK burns the escrow. If the move
+  cannot mint (destination halted, over a cap or the bucket, attesters or the
+  issuer refusing), anyone calls `cancel` on the destination once the deadline
+  has passed, or at once if the recipient cannot hold the token; the
+  MINT_CANCEL returns the escrow to `returnTo`, or to the bank's suspense
+  wallet on that chain if `returnTo` cannot hold it. A paused token or a full
+  bucket makes a message wait. Relayers deliver MINT_ACKs promptly: home
+  refuses an inbound move larger than what it has seen acknowledged abroad.
+- **Escrow is not a holding.** The messenger is never an admitted holder:
+  transfers to it, forced transfers or recovery from it and freezes on it
+  revert, so no one but the messenger's own legs can move escrow.
+- **Own nodes.** Each attester and each issuing bank reads the source chain
+  from nodes it runs itself, never from a shared or third-party endpoint.
 - **Revocations** broadcast from home apply on arrival; admissions stay local
   to each chain.
 
@@ -67,7 +85,8 @@ Then governance accepts, through the timelock, `acceptDefaultAdminTransfer`
 on every contract (OpenZeppelin requires the acceptance in a later block than
 the handover), raises the admin delay with `changeDefaultAdminDelay`, and
 schedules the configuration only it may do: member admission, corridor and
-supply caps, issuer keys, suspense wallets, remotes and tokens.
+supply caps, inbound rate limits, issuer keys, suspense wallets, remotes,
+tokens and the move timeout.
 
 **Closing a deployment.** `script/VerifyRoles.s.sol` fails unless, on every
 contract, the admin is governance, no handover is pending, and the deployer
@@ -86,8 +105,9 @@ router, netting, messenger and DvP venue this needs no new capability:
 
 1. The guardian pauses the contract (the messenger on every chain it touches).
 2. Let in-flight work end: held payments settle or expire, netting
-   obligations settle or expire, every cross-chain message is delivered or
-   bounced, DvP trades settle or lapse. Nothing is migrated mid-flight.
+   obligations settle or expire, every cross-chain move is completed or
+   cancelled (the old messenger holds no escrow, `escrowed` is zero for every
+   member), DvP trades settle or lapse. Nothing is migrated mid-flight.
 3. Deploy the successor with the scripts; the timelock re-grants the ledger's
    `ROUTER_ROLE`, `NETTING_ROLE` or `MESSENGER_ROLE` to it and revokes the old
    one's.
@@ -99,7 +119,8 @@ re-created on a fixed successor from the old contract's own state:
 1. The bank pauses its ticker. Payments holding its tokens settle or expire
    first (the ledger refuses while any hold is open), and inbound payments to
    the bank are answered or expire (accepting one mints the paused ticker).
-   Cross-chain messages for the bank are delivered or bounced.
+   Cross-chain moves for the bank are completed or cancelled, so no
+   messenger holds its escrow.
 2. The bank deploys the successor (`DeployBank.s.sol`, same registry and
    roles) and keeps it paused.
 3. The timelock calls `ledger.beginTokenReplacement(memberId, successor)`. The
@@ -128,8 +149,8 @@ not carry over, so the bank's core system must not reuse them.
 
 | Check | How | State |
 |---|---|---|
-| Unit, scenario and fuzzed invariant tests | `forge test` | 268 pass; invariants cover backing = supply at home and abroad, corridor counts, venue escrow, bounces |
-| Static analysis | `slither .` (config in `contracts/slither.config.json`) | no High or Medium; 2 false positives annotated in `DvPSettlement` with the reason |
+| Unit, scenario and fuzzed invariant tests | `forge test` | 158 pass; invariants cover backing = supply at home and abroad, escrow plus supply conserved across chains, no nonce both minted and cancelled, corridor counts, venue escrow. Every fuzz run must complete and cancel moves (`afterInvariant`); set `XCHAIN_COVERAGE_LOG=deployments/<file>` to log each run's counts |
+| Static analysis | `slither .` (config in `contracts/slither.config.json`) | no High or Medium (22 Low: event ordering and calls in loops); 2 false positives annotated in `DvPSettlement` with the reason |
 | Coverage | `forge coverage --ir-minimum` | lines 78-94% per omnibus contract, branches 30-54%; `--ir-minimum` under-reports inlined code |
 | Deployment | `VerifyRoles` after every deployment | exercised in tests and on anvil |
 | Still to do | mutation testing (slither-mutate or vertigo-rs; `forge --mutate` times out under via-IR), symbolic checks of the ledger invariant (Halmos, Certora), and an independent audit | open |

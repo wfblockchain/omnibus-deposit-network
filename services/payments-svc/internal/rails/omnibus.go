@@ -126,7 +126,7 @@ func build(ctx context.Context, c *conf.Network, rpc string, screener bank.Scree
 		specs = append(specs, omnibus.BankSpec{MemberID: b.MemberID, Name: b.Name, Ticker: b.Ticker, ABA: b.RoutingNumber,
 			MasterAccount: "FRB-MASTER-" + b.RoutingNumber, RequiresAcceptance: b.RequiresAcceptance})
 	}
-	tchKeys, err := omnibus.NewOperatorKeys()
+	opKeys, err := omnibus.NewOperatorKeys()
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func build(ctx context.Context, c *conf.Network, rpc string, screener bank.Scree
 			return nil, err
 		}
 	}
-	net, err := omnibus.Deploy(ctx, cl, tchKeys, specs, keys)
+	net, err := omnibus.Deploy(ctx, cl, opKeys, specs, keys)
 	if err != nil {
 		return nil, fmt.Errorf("deploy: %w", err)
 	}

@@ -7,14 +7,15 @@ import { HolderRegistry } from "src/omnibus/HolderRegistry.sol";
 import { OmnibusLedger } from "src/omnibus/OmnibusLedger.sol";
 import { CrossChainMessenger } from "src/omnibus/crosschain/CrossChainMessenger.sol";
 import { RemoteBankToken } from "src/omnibus/crosschain/RemoteBankToken.sol";
+import { BankToken } from "src/omnibus/BankToken.sol";
 import { IERC7943FungibleToken } from "src/omnibus/IERC7943.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { TimelockController } from "@openzeppelin/contracts/governance/TimelockController.sol";
 import { IAccessControl } from "@openzeppelin/contracts/access/IAccessControl.sol";
 
-/// @dev Burn-and-mint with attestation, as CCTP moves USDC: home domain 0
-///      (the omnibus chain) and a second chain, domain 7, simulated in the
-///      same EVM. Three network attesters, two signatures required.
+/// @dev Lock, attested mint, then burn: home domain 0 (the omnibus chain) and
+///      a second chain, domain 7, simulated in the same EVM. Three network
+///      attesters, two signatures required, plus the issuing bank's key.
 contract CrossChainTest is OmnibusBase {
 
     uint32 constant HOME = 0;
@@ -56,6 +57,8 @@ contract CrossChainTest is OmnibusBase {
         remote.setSupplyCap(BANK_A, 400 * M);
         home.setIssuerAttester(BANK_A, vm.addr(BANK_A_ISSUER_KEY));
         remote.setIssuerAttester(BANK_A, vm.addr(BANK_A_ISSUER_KEY));
+        remote.setRateLimit(HOME, BANK_A, uint128(400 * M), 1 days);
+        home.setRateLimit(REMOTE, BANK_A, uint128(400 * M), 1 days);
 
         _fund(BANK_A, 1_000 * M, "FW-BANK_A");
         _mintA(alice, 500 * M, "CORE-A-1");
@@ -126,6 +129,35 @@ contract CrossChainTest is OmnibusBase {
                 amount: amount,
                 destinationCaller: address(0),
                 returnTo: alice,
+                deadline: uint64(block.timestamp + 1 days),
+                refNonce: 0,
+                hookData: ""
+            })
+        );
+    }
+
+    /// A forged reply (MINT_ACK or MINT_CANCEL) to move `refNonce`.
+    function _forgeReply(uint8 kind, uint32 src, uint32 dst, uint64 nonce, address srcMessenger, uint64 refNonce, uint256 amount)
+        internal
+        view
+        returns (bytes memory)
+    {
+        return abi.encode(
+            CrossChainMessenger.Envelope({
+                version: remote.VERSION(),
+                kind: kind,
+                sourceDomain: src,
+                destDomain: dst,
+                nonce: nonce,
+                sourceMessenger: srcMessenger,
+                memberId: BANK_A,
+                sender: alice,
+                recipient: alice,
+                amount: amount,
+                destinationCaller: address(0),
+                returnTo: alice,
+                deadline: 0,
+                refNonce: refNonce,
                 hookData: ""
             })
         );
@@ -144,26 +176,65 @@ contract CrossChainTest is OmnibusBase {
         message = _lastMessage();
     }
 
-    function test_TokensLeaveByBurnAndArriveByMintWhileBackingStaysHome() public {
+    function _back(uint256 amount) internal returns (bytes memory message) {
+        vm.recordLogs();
+        vm.prank(alice);
+        remote.depositForBurn(BANK_A, amount, HOME, alice);
+        message = _lastMessage();
+    }
+
+    /// Delivers `m` on `on` and returns the reply it sends back.
+    function _deliver(CrossChainMessenger on, bytes memory m) internal returns (bytes memory reply) {
+        vm.recordLogs();
+        on.receiveMessage(m, _attest(m, _two()), _iss(m));
+        reply = _lastMessage();
+    }
+
+    function _cancel(CrossChainMessenger on, bytes memory m) internal returns (bytes memory reply) {
+        vm.recordLogs();
+        on.cancel(m, _attest(m, _two()), _iss(m));
+        reply = _lastMessage();
+    }
+
+    function _settle(CrossChainMessenger on, bytes memory reply) internal {
+        on.receiveMessage(reply, _attest(reply, _two()), _iss(reply));
+    }
+
+    function test_TokensLeaveByLockMintAndBurnWhileBackingStaysHome() public {
         bytes memory m = _out(200 * M);
-        assertEq(dtA.balanceOf(alice), 300 * M, "burned at home");
-        assertEq(ledger.member(BANK_A).remoteSupply, 200 * M);
+        assertEq(dtA.balanceOf(alice), 300 * M, "locked at home");
+        assertEq(dtA.balanceOf(address(home)), 200 * M, "in the messenger's escrow");
+        assertEq(dtA.totalSupply(), 500 * M, "nothing burned yet");
+        assertEq(ledger.member(BANK_A).remoteSupply, 0, "not abroad until minted there");
+        assertEq(home.pendingOut(BANK_A, REMOTE), 200 * M);
         assertEq(_backing(BANK_A), 500 * M, "backing did not move");
         assertTrue(ledger.invariantsHold(), "backing == home supply + remote supply");
 
-        remote.receiveMessage(m, _attest(m, _two()), _iss(m));
+        bytes memory ack = _deliver(remote, m);
         assertEq(dtARemote.balanceOf(alice), 200 * M, "minted on the other chain");
+        assertEq(uint8(remote.inbound(HOME, 0)), uint8(CrossChainMessenger.Inbound.Minted));
 
-        // Home again: burn there, mint here.
-        vm.recordLogs();
-        vm.prank(alice);
-        remote.depositForBurn(BANK_A, 150 * M, HOME, alice);
-        bytes memory back = _lastMessage();
-        home.receiveMessage(back, _attest(back, _two()), _iss(back));
-        assertEq(dtA.balanceOf(alice), 450 * M);
-        assertEq(dtARemote.balanceOf(alice), 50 * M);
-        assertEq(ledger.member(BANK_A).remoteSupply, 50 * M);
+        _settle(home, ack);
+        assertEq(dtA.balanceOf(address(home)), 0, "escrow burned on the acknowledgement");
+        assertEq(dtA.totalSupply(), 300 * M);
+        assertEq(ledger.member(BANK_A).remoteSupply, 200 * M);
+        assertEq(home.outstanding(BANK_A, REMOTE), 200 * M);
+        assertEq(home.pendingOut(BANK_A, REMOTE), 0);
+        (CrossChainMessenger.MoveStatus st,,,,,) = home.moves(0);
+        assertEq(uint8(st), uint8(CrossChainMessenger.MoveStatus.Completed));
         assertTrue(ledger.invariantsHold());
+
+        // Home again: lock there, mint here, burn there.
+        bytes memory back = _back(150 * M);
+        bytes memory ack2 = _deliver(home, back);
+        assertEq(dtA.balanceOf(alice), 450 * M);
+        assertEq(ledger.member(BANK_A).remoteSupply, 50 * M, "counted off when minted home");
+        assertEq(dtARemote.totalSupply(), 200 * M, "escrow abroad until the acknowledgement");
+        assertTrue(ledger.invariantsHold());
+        _settle(remote, ack2);
+        assertEq(dtARemote.balanceOf(alice), 50 * M);
+        assertEq(dtARemote.totalSupply(), 50 * M);
+        assertEq(remote.escrowed(BANK_A), 0);
     }
 
     function test_BackingForTokensAbroadCannotBeDefunded() public {
@@ -213,21 +284,34 @@ contract CrossChainTest is OmnibusBase {
         remote.receiveMessage(m, twice, _iss(m));
     }
 
-    function test_OnlyTheMessengerMintsOrBurns() public {
+    function test_OnlyTheMessengerMintsLocksOrBurns() public {
         vm.expectRevert(abi.encodeWithSelector(RemoteBankToken.OnlyMessenger.selector, address(this)));
         dtARemote.messengerMint(alice, 1);
-        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(RemoteBankToken.OnlyMessenger.selector, address(this)));
+        dtARemote.messengerLock(alice, 1);
+        vm.expectRevert(abi.encodeWithSelector(RemoteBankToken.OnlyMessenger.selector, address(this)));
+        dtARemote.messengerBurnLocked(1);
+        vm.expectRevert(abi.encodeWithSelector(RemoteBankToken.OnlyMessenger.selector, address(this)));
+        dtARemote.messengerUnlock(alice, 1);
+        vm.startPrank(alice);
         vm.expectRevert();
         dtA.messengerMint(alice, 1);
+        vm.expectRevert();
+        dtA.messengerLock(alice, 1);
+        vm.expectRevert();
+        dtA.messengerBurnLocked(1);
+        vm.expectRevert();
+        dtA.messengerUnlock(alice, 1);
+        vm.stopPrank();
     }
 
     /*//////////////////////////////////////////////////////////////////////////
                         Corridors, routing, delivery, pause
     //////////////////////////////////////////////////////////////////////////*/
 
+    /// A whole move out: lock, mint there, acknowledgement home.
     function _deliverOut(uint256 amount) internal {
-        bytes memory m = _out(amount);
-        remote.receiveMessage(m, _attest(m, _two()), _iss(m));
+        _settle(home, _deliver(remote, _out(amount)));
     }
 
     function test_ACorridorIsClosedUntilGovernanceOpensIt() public {
@@ -247,11 +331,22 @@ contract CrossChainTest is OmnibusBase {
         assertEq(home.outstanding(BANK_A, REMOTE), 300 * M);
     }
 
+    /// Moves still in escrow reserve the corridor too, so the cap holds
+    /// whichever of them are minted.
+    function test_PendingMovesReserveTheCorridorCap() public {
+        _out(300 * M);
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(CrossChainMessenger.CorridorCapExceeded.selector, BANK_A, REMOTE, 401 * M, 400 * M)
+        );
+        home.depositForBurn(BANK_A, 101 * M, REMOTE, alice);
+    }
+
     /// A compromised attester set signs a message from the real remote
     /// messenger for more than was ever sent there: home refuses to mint it.
     function test_AChainCannotSendHomeMoreThanWasSentToIt() public {
         _deliverOut(100 * M);
-        bytes memory forged = _forge(REMOTE, HOME, 0, address(remote), 101 * M);
+        bytes memory forged = _forge(REMOTE, HOME, 50, address(remote), 101 * M);
         vm.expectRevert(
             abi.encodeWithSelector(CrossChainMessenger.CorridorUnderflow.selector, BANK_A, REMOTE, 101 * M, 100 * M)
         );
@@ -292,7 +387,8 @@ contract CrossChainTest is OmnibusBase {
         bytes[] memory sigs = _attest(m, _two());
         vm.expectRevert(Pausable.EnforcedPause.selector);
         remote.receiveMessage(m, sigs, _iss(m));
-        assertEq(ledger.member(BANK_A).remoteSupply, 50 * M, "still counted abroad: never under-backed");
+        assertEq(dtA.balanceOf(address(home)), 50 * M, "still in escrow at home: never under-backed");
+        assertTrue(ledger.invariantsHold());
         remote.unpause();
         remote.receiveMessage(m, sigs, _iss(m));
         assertEq(dtARemote.balanceOf(alice), 50 * M);
@@ -329,7 +425,7 @@ contract CrossChainTest is OmnibusBase {
         );
         dtARemote.transfer(carol, 30 * M);
 
-        vm.prank(alice);
+        vm.prank(alice); // the lock respects the freeze too
         vm.expectRevert(
             abi.encodeWithSelector(IERC7943FungibleToken.ERC7943InsufficientUnfrozenBalance.selector, alice, 30 * M, 20 * M)
         );
@@ -363,7 +459,7 @@ contract CrossChainTest is OmnibusBase {
                     Two keys, capped on both sides, slow to change
     //////////////////////////////////////////////////////////////////////////*/
 
-    function test_TCHsQuorumAloneCannotMintABanksDeposit() public {
+    function test_TheOperatorsQuorumAloneCannotMintABanksDeposit() public {
         bytes memory m = _out(10 * M);
         bytes memory wrong = _signAs(attesterKeys[1], m); // an operator attester posing as the bank
         vm.expectRevert(
@@ -372,7 +468,7 @@ contract CrossChainTest is OmnibusBase {
         remote.receiveMessage(m, _attest(m, _two()), wrong);
     }
 
-    function test_TheBankAloneCannotMintWithoutTCH() public {
+    function test_TheBankAloneCannotMintWithoutTheOperator() public {
         bytes memory m = _out(10 * M);
         uint256[] memory one = new uint256[](1);
         one[0] = 0;
@@ -446,76 +542,70 @@ contract CrossChainTest is OmnibusBase {
                 Undeliverable messages, thresholds, guardian caps
     //////////////////////////////////////////////////////////////////////////*/
 
-    /// Tokens burned at home for a wallet that may not hold them on the other
-    /// chain are not lost: anyone bounces the message and a RETURN re-mints
-    /// them to the sender at home. The original can never mint afterwards.
-    function test_AnUndeliverableTransferComesBackToItsSender() public {
+    /// Tokens locked at home for a wallet that may not hold them on the other
+    /// chain are not lost: anyone cancels the move there at once, and the
+    /// MINT_CANCEL returns the escrow at home. The original can never mint.
+    function test_AnUndeliverableTransferIsCancelledAndItsEscrowReturns() public {
         vm.recordLogs();
         vm.prank(alice);
         home.depositForBurn(BANK_A, 50 * M, REMOTE, outsider);
         bytes memory m = _lastMessage();
         assertEq(dtA.balanceOf(alice), 450 * M);
 
-        vm.recordLogs();
-        remote.bounce(m, _attest(m, _two()), _iss(m));
-        bytes memory ret = _lastMessage();
+        bytes memory c = _cancel(remote, m);
+        assertEq(uint8(remote.inbound(HOME, 0)), uint8(CrossChainMessenger.Inbound.Cancelled));
 
         aRegistryRemote.authorize(outsider, "LATE-KYC");
         vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.NonceUsed.selector, HOME, uint64(0)));
         remote.receiveMessage(m, _attest(m, _two()), _iss(m));
 
-        home.receiveMessage(ret, _attest(ret, _two()), _iss(ret));
+        _settle(home, c);
         assertEq(dtA.balanceOf(alice), 500 * M, "whole again");
+        assertEq(dtA.balanceOf(address(home)), 0);
+        assertEq(home.pendingOut(BANK_A, REMOTE), 0);
         assertEq(home.outstanding(BANK_A, REMOTE), 0);
         assertEq(ledger.member(BANK_A).remoteSupply, 0);
         assertTrue(ledger.invariantsHold());
     }
 
-    function test_ADeliverableTransferCannotBeBounced() public {
+    function test_ADeliverableTransferCannotBeCancelledBeforeItsDeadline() public {
         bytes memory m = _out(10 * M);
-        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.StillDeliverable.selector, alice));
-        remote.bounce(m, _attest(m, _two()), _iss(m));
+        (,, uint64 deadline,,,) = home.moves(0);
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.NotYetCancellable.selector, deadline, alice));
+        remote.cancel(m, _attest(m, _two()), _iss(m));
     }
 
-    /// Home cannot deliver to an unadmitted wallet either; the RETURN goes back
-    /// out, and if its sender has meanwhile lost admission too, the amount
-    /// lands in the bank's suspense wallet rather than nowhere.
-    function test_AReturnNobodyCanTakeLandsInTheBanksSuspenseWallet() public {
+    /// Home cannot deliver to an unadmitted wallet either; the move is
+    /// cancelled, and if its sender has meanwhile lost admission too, the
+    /// escrow lands in the bank's suspense wallet rather than nowhere.
+    function test_CancelledEscrowNobodyCanTakeLandsInTheBanksSuspenseWallet() public {
         _deliverOut(100 * M);
         vm.recordLogs();
         vm.prank(alice);
         remote.depositForBurn(BANK_A, 40 * M, HOME, outsider);
         bytes memory m = _lastMessage();
 
-        vm.recordLogs();
-        home.bounce(m, _attest(m, _two()), _iss(m));
-        bytes memory ret = _lastMessage();
-        assertEq(home.outstanding(BANK_A, REMOTE), 100 * M, "still counted abroad until the RETURN lands");
+        bytes memory c = _cancel(home, m);
+        assertEq(home.outstanding(BANK_A, REMOTE), 100 * M, "never counted off: never minted home");
 
         aRegistryRemote.revoke(alice, "KYC-LAPSED");
         vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.NoSuspense.selector, BANK_A));
-        remote.receiveMessage(ret, _attest(ret, _two()), _iss(ret));
+        remote.receiveMessage(c, _attest(c, _two()), _iss(c));
 
         address aSuspense = makeAddr("bank-a-suspense");
         aRegistryRemote.authorize(aSuspense, "SUSPENSE");
         remote.setSuspense(BANK_A, aSuspense);
-        remote.receiveMessage(ret, _attest(ret, _two()), _iss(ret));
+        _settle(remote, c);
         assertEq(dtARemote.balanceOf(aSuspense), 40 * M);
         assertEq(dtARemote.totalSupply(), 100 * M, "every token abroad is accounted for");
         assertEq(ledger.member(BANK_A).remoteSupply, 100 * M);
         assertTrue(ledger.invariantsHold());
     }
 
-    function test_AReturnIsNeverBounced() public {
-        vm.recordLogs();
-        vm.prank(alice);
-        home.depositForBurn(BANK_A, 5 * M, REMOTE, outsider);
-        bytes memory m = _lastMessage();
-        vm.recordLogs();
-        remote.bounce(m, _attest(m, _two()), _iss(m));
-        bytes memory ret = _lastMessage();
-        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.NotBounceable.selector, uint8(1)));
-        home.bounce(ret, _attest(ret, _two()), _iss(ret));
+    function test_OnlyATransferCanBeCancelled() public {
+        bytes memory ack = _deliver(remote, _out(5 * M));
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.NotCancellable.selector, uint8(3)));
+        home.cancel(ack, _attest(ack, _two()), _iss(ack));
     }
 
     /// Three attesters, threshold two. The threshold must stay a strict
@@ -557,8 +647,9 @@ contract CrossChainTest is OmnibusBase {
         home.setCorridorCap(BANK_A, REMOTE, 500 * M);
     }
 
-    /// A paused remote token makes delivery wait; it is not a reason to bounce.
-    function test_APausedTokenMakesAMessageWaitNotBounce() public {
+    /// A paused remote token makes delivery wait; before the deadline it is
+    /// not a reason to cancel.
+    function test_APausedTokenMakesAMessageWaitNotCancel() public {
         bytes memory m = _out(10 * M);
         address aPauserRemote = makeAddr("bank-a-pauser-remote");
         dtARemote.grantRole(dtARemote.PAUSER_ROLE(), aPauserRemote);
@@ -566,8 +657,9 @@ contract CrossChainTest is OmnibusBase {
         dtARemote.pause();
         vm.expectRevert(Pausable.EnforcedPause.selector);
         remote.receiveMessage(m, _attest(m, _two()), _iss(m));
-        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.StillDeliverable.selector, alice));
-        remote.bounce(m, _attest(m, _two()), _iss(m));
+        (,, uint64 deadline,,,) = home.moves(0);
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.NotYetCancellable.selector, deadline, alice));
+        remote.cancel(m, _attest(m, _two()), _iss(m));
         vm.prank(aPauserRemote);
         dtARemote.unpause();
         remote.receiveMessage(m, _attest(m, _two()), _iss(m));
@@ -622,6 +714,308 @@ contract CrossChainTest is OmnibusBase {
         bytes memory m = _out(10 * M); // attesters 0 and 2 still deliver
         remote.receiveMessage(m, _attest(m, _two()), _iss(m));
         assertEq(dtARemote.balanceOf(alice), 10 * M);
+    }
+
+    /*//////////////////////////////////////////////////////////////////////////
+                    Inbound rate limit, on the receiving chain
+    //////////////////////////////////////////////////////////////////////////*/
+
+    /// A chain connected with everything but a bucket mints nothing: the
+    /// rate limit is closed until governance opens it.
+    function test_AnUnsetBucketIsClosed() public {
+        uint32 other = 8;
+        CrossChainMessenger m8 = new CrossChainMessenger(other, HOME, OmnibusLedger(address(0)), address(this), 0);
+        RemoteBankToken t8 = new RemoteBankToken("Bank A USD", "A-dT", address(m8), aRegistryRemote, address(this), 0);
+        for (uint256 i = 0; i < 3; i++) {
+            m8.setAttester(attesters[i], true);
+        }
+        m8.setThreshold(2);
+        m8.setRemote(HOME, address(home));
+        m8.setToken(BANK_A, address(t8));
+        m8.setSupplyCap(BANK_A, 400 * M);
+        m8.setIssuerAttester(BANK_A, vm.addr(BANK_A_ISSUER_KEY));
+        home.setRemote(other, address(m8));
+        home.setCorridorCap(BANK_A, other, 400 * M);
+
+        (uint256 cap, uint64 window, uint256 avail) = m8.rateLimit(HOME, BANK_A);
+        assertEq(cap + window + avail, 0, "unset");
+
+        vm.recordLogs();
+        vm.prank(alice);
+        home.depositForBurn(BANK_A, 10 * M, other, alice);
+        bytes memory m = _lastMessage();
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.RateLimited.selector, HOME, BANK_A, 10 * M, 0));
+        m8.receiveMessage(m, _attest(m, _two()), _iss(m));
+
+        m8.setRateLimit(HOME, BANK_A, uint128(100 * M), 1 days);
+        m8.receiveMessage(m, _attest(m, _two()), _iss(m));
+        assertEq(t8.balanceOf(alice), 10 * M, "the same message, once governance opens the bucket");
+    }
+
+    /// A message over the bucket reverts and stays deliverable; it goes
+    /// through once the bucket has refilled, linearly over the window.
+    function test_TheBucketRefillsLinearlyAndAnOverLimitMintWaits() public {
+        remote.setRateLimit(HOME, BANK_A, uint128(100 * M), 1 days);
+        _deliver(remote, _out(100 * M));
+        (,, uint256 avail) = remote.rateLimit(HOME, BANK_A);
+        assertEq(avail, 0, "drained");
+
+        bytes memory m = _out(30 * M);
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.RateLimited.selector, HOME, BANK_A, 30 * M, 0));
+        remote.receiveMessage(m, _attest(m, _two()), _iss(m));
+
+        // Absolute times from the fixture's t0 (storage): under via-IR a local
+        // copy of block.timestamp can be re-read after a warp.
+        vm.warp(t0 + 6 hours);
+        (,, avail) = remote.rateLimit(HOME, BANK_A);
+        assertEq(avail, 25 * M, "a quarter of the window, a quarter of the capacity");
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.RateLimited.selector, HOME, BANK_A, 30 * M, 25 * M));
+        remote.receiveMessage(m, _attest(m, _two()), _iss(m));
+
+        vm.warp(t0 + 12 hours);
+        _deliver(remote, m); // retried: the message was never lost
+        (,, avail) = remote.rateLimit(HOME, BANK_A);
+        assertEq(avail, 20 * M);
+        assertEq(dtARemote.balanceOf(alice), 130 * M);
+
+        vm.warp(t0 + 10 days);
+        (,, avail) = remote.rateLimit(HOME, BANK_A);
+        assertEq(avail, 100 * M, "refills to the capacity, never past it");
+    }
+
+    function test_TheGuardianOnlyTightensTheBucket() public {
+        address guardian = makeAddr("operator-guardian");
+        remote.grantRole(remote.PAUSER_ROLE(), guardian);
+        _deliver(remote, _out(100 * M)); // 300 of 400 left
+
+        vm.prank(guardian);
+        remote.lowerRateLimit(HOME, BANK_A, uint128(50 * M), 1 days);
+        (uint256 cap, uint64 window, uint256 avail) = remote.rateLimit(HOME, BANK_A);
+        assertEq(cap, 50 * M);
+        assertEq(window, 1 days);
+        assertEq(avail, 50 * M, "the level never exceeds the new capacity");
+
+        vm.prank(guardian);
+        remote.lowerRateLimit(HOME, BANK_A, uint128(50 * M), 2 days); // a slower refill
+        vm.startPrank(guardian);
+        vm.expectRevert(
+            abi.encodeWithSelector(CrossChainMessenger.RateLimitNotLowered.selector, 50 * M, 2 days, 60 * M, 2 days)
+        );
+        remote.lowerRateLimit(HOME, BANK_A, uint128(60 * M), 2 days);
+        vm.expectRevert(
+            abi.encodeWithSelector(CrossChainMessenger.RateLimitNotLowered.selector, 50 * M, 2 days, 40 * M, 1 days)
+        );
+        remote.lowerRateLimit(HOME, BANK_A, uint128(40 * M), 1 days); // a faster refill is a loosening
+        vm.expectRevert(
+            abi.encodeWithSelector(CrossChainMessenger.RateLimitNotLowered.selector, 50 * M, 2 days, 50 * M, 2 days)
+        );
+        remote.lowerRateLimit(HOME, BANK_A, uint128(50 * M), 2 days);
+        bytes32 adminRole = remote.DEFAULT_ADMIN_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, guardian, adminRole)
+        );
+        remote.setRateLimit(HOME, BANK_A, uint128(500 * M), 1 days);
+
+        remote.lowerRateLimit(HOME, BANK_A, 0, 2 days); // closed at once
+        vm.stopPrank();
+        bytes memory m = _out(1);
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.RateLimited.selector, HOME, BANK_A, 1, 0));
+        remote.receiveMessage(m, _attest(m, _two()), _iss(m));
+    }
+
+    function test_ABucketNeedsAWindow() public {
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.BadRateLimit.selector, 1, 0));
+        remote.setRateLimit(HOME, BANK_A, 1, 0);
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.UnknownDomain.selector, REMOTE));
+        remote.setRateLimit(REMOTE, BANK_A, 1, 1 days);
+    }
+
+    /// The worst case again: the operator's attesters AND the bank's key sign
+    /// messages no lock at home ever backed (a verifier fed by poisoned
+    /// nodes would do the same). Every check on the message passes, and the
+    /// receiving chain's bucket is what still bounds the damage per window,
+    /// well under the supply cap.
+    function test_AForgedMessageWithBothKeysIsStillRateLimited() public {
+        _deliverOut(300 * M);
+        remote.setRateLimit(HOME, BANK_A, uint128(50 * M), 1 days);
+        bytes memory f1 = _forge(HOME, REMOTE, 900, address(home), 50 * M);
+        remote.receiveMessage(f1, _attest(f1, _two()), _iss(f1));
+        assertEq(dtARemote.balanceOf(alice), 350 * M, "every signature on the forgery was valid");
+
+        bytes memory f2 = _forge(HOME, REMOTE, 901, address(home), 1 * M);
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.RateLimited.selector, HOME, BANK_A, 1 * M, 0));
+        remote.receiveMessage(f2, _attest(f2, _two()), _iss(f2));
+        assertLt(dtARemote.totalSupply(), remote.supplyCap(BANK_A));
+
+        // Home is bounded the same way on what comes back.
+        home.setRateLimit(REMOTE, BANK_A, uint128(20 * M), 1 days);
+        bytes memory f3 = _forge(REMOTE, HOME, 902, address(remote), 21 * M);
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.RateLimited.selector, REMOTE, BANK_A, 21 * M, 20 * M));
+        home.receiveMessage(f3, _attest(f3, _two()), _iss(f3));
+    }
+
+    /// Escrow released by a MINT_CANCEL is value appearing on this chain too,
+    /// so it draws on the same bucket.
+    function test_ACancelReleasingEscrowDrawsOnTheBucket() public {
+        vm.recordLogs();
+        vm.prank(alice);
+        home.depositForBurn(BANK_A, 50 * M, REMOTE, outsider);
+        bytes memory c = _cancel(remote, _lastMessage());
+        home.setRateLimit(REMOTE, BANK_A, uint128(10 * M), 1 days);
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.RateLimited.selector, REMOTE, BANK_A, 50 * M, 10 * M));
+        home.receiveMessage(c, _attest(c, _two()), _iss(c));
+        home.setRateLimit(REMOTE, BANK_A, uint128(50 * M), 1 days);
+        vm.warp(block.timestamp + 1 days);
+        _settle(home, c);
+        assertEq(dtA.balanceOf(alice), 500 * M);
+    }
+
+    /*//////////////////////////////////////////////////////////////////////////
+                    Lock then burn: nothing burned before its mint
+    //////////////////////////////////////////////////////////////////////////*/
+
+    function test_NothingBurnsBeforeTheMintIsAcknowledged() public {
+        bytes memory m = _out(80 * M);
+        bytes memory ack = _deliver(remote, m);
+        assertEq(dtARemote.balanceOf(alice), 80 * M);
+        assertEq(dtA.totalSupply(), 500 * M, "minted there, still escrowed here");
+        assertEq(home.escrowed(BANK_A), 80 * M);
+        assertEq(home.outstanding(BANK_A, REMOTE), 0);
+        assertTrue(ledger.invariantsHold());
+
+        CrossChainMessenger.Envelope memory a = abi.decode(ack, (CrossChainMessenger.Envelope));
+        assertEq(a.kind, remote.KIND_MINT_ACK());
+        assertEq(a.refNonce, 0);
+        assertEq(a.amount, 80 * M);
+
+        _settle(home, ack);
+        assertEq(dtA.totalSupply(), 420 * M);
+        assertEq(home.escrowed(BANK_A), 0);
+        assertEq(home.outstanding(BANK_A, REMOTE), 80 * M);
+    }
+
+    /// The destination refuses: here its issuer stops co-signing, so no mint
+    /// can happen. Past the deadline nobody can mint the move any more, and
+    /// anyone cancels it; the escrow comes back.
+    function test_ARefusedMoveIsCancelledAfterItsDeadlineAndTheEscrowReturns() public {
+        bytes memory m = _out(60 * M);
+        remote.setIssuerAttester(BANK_A, vm.addr(0xDEAD)); // the bank stops signing here
+        vm.expectRevert(
+            abi.encodeWithSelector(CrossChainMessenger.BadIssuerAttestation.selector, BANK_A, vm.addr(BANK_A_ISSUER_KEY))
+        );
+        remote.receiveMessage(m, _attest(m, _two()), _iss(m));
+        remote.setIssuerAttester(BANK_A, vm.addr(BANK_A_ISSUER_KEY));
+
+        (,, uint64 deadline,,,) = home.moves(0);
+        vm.warp(deadline);
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.Expired.selector, HOME, uint64(0), deadline));
+        remote.receiveMessage(m, _attest(m, _two()), _iss(m));
+
+        remote.grantRole(remote.PAUSER_ROLE(), address(this));
+        remote.pause(); // a halted messenger still lets senders recover
+        bytes memory c = _cancel(remote, m);
+        _settle(home, c);
+        assertEq(dtA.balanceOf(alice), 500 * M);
+        assertEq(home.escrowed(BANK_A), 0);
+        assertEq(home.pendingOut(BANK_A, REMOTE), 0);
+        (CrossChainMessenger.MoveStatus st,,,,,) = home.moves(0);
+        assertEq(uint8(st), uint8(CrossChainMessenger.MoveStatus.Cancelled));
+        assertTrue(ledger.invariantsHold());
+    }
+
+    function test_ANonceIsMintedOrCancelledNeverBoth() public {
+        bytes memory m1 = _out(10 * M);
+        _deliver(remote, m1);
+        vm.warp(t0 + 2 days);
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.NonceUsed.selector, HOME, uint64(0)));
+        remote.cancel(m1, _attest(m1, _two()), _iss(m1));
+
+        bytes memory m2 = _out(10 * M);
+        vm.warp(t0 + 4 days);
+        _cancel(remote, m2);
+        uint64 n2 = abi.decode(m2, (CrossChainMessenger.Envelope)).nonce;
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.NonceUsed.selector, HOME, n2));
+        remote.receiveMessage(m2, _attest(m2, _two()), _iss(m2));
+        assertEq(dtARemote.totalSupply(), 10 * M, "minted once");
+    }
+
+    /// Replies apply once, only to a pending move, and only as sent: a replay,
+    /// a reply to a settled move, or one that misstates the move is refused.
+    function test_RepliesAreNotReplayable() public {
+        bytes memory ack = _deliver(remote, _out(10 * M));
+        _settle(home, ack);
+        uint64 ackNonce = abi.decode(ack, (CrossChainMessenger.Envelope)).nonce;
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.NonceUsed.selector, REMOTE, ackNonce));
+        home.receiveMessage(ack, _attest(ack, _two()), _iss(ack));
+
+        // Even with both keys, a cancel for the completed move is refused...
+        bytes memory c = _forgeReply(4, REMOTE, HOME, 777, address(remote), 0, 10 * M);
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.UnknownMove.selector, REMOTE, uint64(0)));
+        home.receiveMessage(c, _attest(c, _two()), _iss(c));
+
+        // ...and so is an acknowledgement that misstates a pending one.
+        _out(20 * M);
+        bytes memory bad = _forgeReply(3, REMOTE, HOME, 778, address(remote), 1, 21 * M);
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.UnknownMove.selector, REMOTE, uint64(1)));
+        home.receiveMessage(bad, _attest(bad, _two()), _iss(bad));
+        assertEq(home.escrowed(BANK_A), 20 * M);
+    }
+
+    function test_TheMoveTimeoutIsBounded() public {
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.BadMoveTimeout.selector, uint64(1)));
+        home.setMoveTimeout(1);
+        vm.expectRevert(abi.encodeWithSelector(CrossChainMessenger.BadMoveTimeout.selector, uint64(31 days)));
+        home.setMoveTimeout(31 days);
+        home.setMoveTimeout(2 hours);
+        _out(1 * M);
+        (,, uint64 deadline,,,) = home.moves(0);
+        assertEq(deadline, block.timestamp + 2 hours);
+    }
+
+    /// The escrow is the messenger's balance, but the messenger is never a
+    /// holder: nobody transfers to it, and compliance cannot move or freeze it.
+    function test_TheEscrowIsNotAHolder() public {
+        aRegistry.authorize(address(home), "MISTAKE");
+        aRegistryRemote.authorize(address(remote), "MISTAKE");
+        _out(10 * M);
+        _deliverOut(20 * M);
+        _back(5 * M);
+
+        assertFalse(dtA.canReceive(address(home)));
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(IERC7943FungibleToken.ERC7943CannotReceive.selector, address(home)));
+        dtA.transfer(address(home), 1);
+        vm.startPrank(aCompliance);
+        vm.expectRevert(abi.encodeWithSelector(BankToken.EscrowAccount.selector, address(home)));
+        dtA.forcedTransfer(address(home), carol, 1);
+        vm.expectRevert(abi.encodeWithSelector(BankToken.EscrowAccount.selector, address(home)));
+        dtA.setFrozenTokens(address(home), 1);
+        vm.expectRevert(abi.encodeWithSelector(BankToken.EscrowAccount.selector, address(home)));
+        dtA.recover(address(home), carol);
+        vm.stopPrank();
+
+        address c = _remoteCompliance();
+        assertFalse(dtARemote.canReceive(address(remote)));
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(IERC7943FungibleToken.ERC7943CannotReceive.selector, address(remote)));
+        dtARemote.transfer(address(remote), 1);
+        vm.startPrank(c);
+        vm.expectRevert(abi.encodeWithSelector(RemoteBankToken.EscrowAccount.selector, address(remote)));
+        dtARemote.forcedTransfer(address(remote), alice, 1);
+        vm.expectRevert(abi.encodeWithSelector(RemoteBankToken.EscrowAccount.selector, address(remote)));
+        dtARemote.setFrozenTokens(address(remote), 1);
+        vm.expectRevert(abi.encodeWithSelector(RemoteBankToken.EscrowAccount.selector, address(remote)));
+        dtARemote.recover(address(remote), alice);
+        vm.stopPrank();
+
+        // A transfer addressed to the messenger itself can only be cancelled.
+        vm.recordLogs();
+        vm.prank(alice);
+        home.depositForBurn(BANK_A, 1 * M, REMOTE, address(remote));
+        bytes memory m = _lastMessage();
+        _settle(home, _cancel(remote, m));
+        assertEq(home.escrowed(BANK_A), 10 * M);
+        assertEq(dtA.balanceOf(address(home)), 10 * M);
     }
 
 }

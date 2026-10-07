@@ -136,7 +136,7 @@ func (p *Portal) Handler() http.Handler {
 	mux.HandleFunc("POST /ops/defunds", p.post(p.requestDefund))
 	mux.HandleFunc("POST /ops/defunds/{id}/approve", p.post(p.approveDefund))
 	mux.HandleFunc("POST /ops/holds/{id}/{action}", p.post(p.hold))
-	mux.HandleFunc("GET /operator", p.page(p.tchPage))
+	mux.HandleFunc("GET /operator", p.page(p.operatorPage))
 	mux.HandleFunc("POST /operator/netting", p.post(p.runNetting))
 	mux.HandleFunc("POST /operator/reconcile", p.post(p.reconcile))
 	mux.HandleFunc("POST /operator/clock", p.post(p.clock))
@@ -511,7 +511,7 @@ func (p *Portal) hold(r *http.Request, s *session) (string, string, error) {
 
 // ─── operator operations ───
 
-func (p *Portal) tchPage(w http.ResponseWriter, r *http.Request, s *session) {
+func (p *Portal) operatorPage(w http.ResponseWriter, r *http.Request, s *session) {
 	n, err := p.op.GetNetwork(p.ctx(r, s), &pb.GetNetworkRequest{})
 	if err != nil {
 		p.fail(w, r, s, err)

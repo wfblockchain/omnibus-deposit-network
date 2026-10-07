@@ -12,7 +12,7 @@ import { RemoteBankToken } from "src/omnibus/crosschain/RemoteBankToken.sol";
 import { DvPSettlement } from "src/omnibus/dvp/DvPSettlement.sol";
 import { MockSecurityToken } from "test/utils/MockSecurityToken.sol";
 
-/// @dev Random sequences over the venue: trades matched, cash burned at home
+/// @dev Random sequences over the venue: trades matched, cash locked at home
 ///      and delivered (right amount, wrong amount, late), assets escrowed or
 ///      not, approvals given or not, settlement, bilateral cancellation,
 ///      lapse and refund, credits withdrawn, the buyer dropped from and
@@ -120,20 +120,37 @@ contract DvPHandler is Test {
         pendingAmount[i] = pendingAmount[pendingAmount.length - 1];
         pending.pop();
         pendingAmount.pop();
+        vm.recordLogs();
+        (bytes[] memory sigs, bytes memory iss) = _sign(m);
+        dvp.receiveCash(m, sigs, iss);
+        inFlight -= a;
+        // The relayer takes the mint's acknowledgement home: the escrow burns.
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 j = logs.length; j > 0; j--) {
+            if (logs[j - 1].topics[0] == keccak256("MessageSent(bytes)")) {
+                bytes memory ack = abi.decode(logs[j - 1].data, (bytes));
+                (sigs, iss) = _sign(ack);
+                home.receiveMessage(ack, sigs, iss);
+                return;
+            }
+        }
+        revert("no acknowledgement");
+    }
+
+    function _sign(bytes memory m) internal view returns (bytes[] memory sigs, bytes memory iss) {
         bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", keccak256(m)));
-        bytes[] memory sigs = new bytes[](2);
+        sigs = new bytes[](2);
         (uint256 k0, uint256 k1) = vm.addr(keys[0]) < vm.addr(keys[1]) ? (keys[0], keys[1]) : (keys[1], keys[0]);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(k0, digest);
         sigs[0] = abi.encodePacked(r, s, v);
         (v, r, s) = vm.sign(k1, digest);
         sigs[1] = abi.encodePacked(r, s, v);
         (v, r, s) = vm.sign(issuerKey, digest);
-        dvp.receiveCash(m, sigs, abi.encodePacked(r, s, v));
-        inFlight -= a;
+        iss = abi.encodePacked(r, s, v);
     }
 
     /// The newest trade's whole cash path in one step: standing approval,
-    /// burn at home, delivery here. Interleaves settlement with the rest.
+    /// lock at home, delivery here. Interleaves settlement with the rest.
     function payNewest() external {
         if (ids.length == 0) return;
         vm.prank(seller);
@@ -229,10 +246,13 @@ contract DvPInvariantTest is DvPBase {
         assertEq(cash.balanceOf(seller), dollars, "seller's cash == settled payments");
     }
 
-    /// Across both chains the backing never falls short: tokens on domain 7
-    /// plus messages in flight equal what home counts as abroad.
+    /// Across both chains the backing never falls short: home counts as
+    /// abroad exactly the tokens on domain 7, and cash not yet minted there
+    /// sits in the home messenger's escrow, still part of home supply.
     function invariant_BackingCoversEveryTokenOnBothChains() public view virtual {
-        assertEq(ledger.member(BANK_A).remoteSupply, cash.totalSupply() + handler.inFlight());
+        assertEq(ledger.member(BANK_A).remoteSupply, cash.totalSupply());
+        assertEq(dtA.balanceOf(address(home)), handler.inFlight());
+        assertEq(home.escrowed(BANK_A), handler.inFlight());
         assertEq(home.outstanding(BANK_A, 7), ledger.member(BANK_A).remoteSupply);
         assertTrue(ledger.invariantsHold());
     }

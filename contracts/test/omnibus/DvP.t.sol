@@ -67,6 +67,8 @@ abstract contract DvPBase is OmnibusBase {
         remote.setSupplyCap(BANK_A, 50_000_000 * M);
         home.setIssuerAttester(BANK_A, vm.addr(aIssuerKey));
         remote.setIssuerAttester(BANK_A, vm.addr(aIssuerKey));
+        remote.setRateLimit(HOME, BANK_A, uint128(50_000_000 * M), 1 days);
+        home.setRateLimit(REMOTE, BANK_A, uint128(50_000_000 * M), 1 days);
 
         dvp = new DvPSettlement(remote, address(this), 2 days);
         dvp.grantRole(dvp.PAUSER_ROLE(), pauser);
@@ -145,7 +147,7 @@ abstract contract DvPBase is OmnibusBase {
         return abi.encodePacked(r, s, v);
     }
 
-    /// At home: the buyer burns dtA and sends it to the venue, for the trade.
+    /// At home: the buyer locks dtA and sends it to the venue, for the trade.
     function _sendCash(bytes32 id, uint256 dollars) internal returns (bytes memory m) {
         vm.recordLogs();
         vm.prank(buyer);
@@ -182,10 +184,16 @@ contract DvPTest is DvPBase {
 
         uint256 fedBefore = ledger.omnibusTotal();
         bytes memory m = _sendCash(id, 10_020_000);
-        assertEq(ledger.member(BANK_A).remoteSupply, 10_020_000 * M, "counted abroad while in flight");
+        assertEq(dtA.balanceOf(address(home)), 10_020_000 * M, "escrowed at home while in flight");
+        assertEq(ledger.member(BANK_A).remoteSupply, 0, "not abroad until minted there");
 
+        vm.recordLogs();
         vm.prank(relayer);
         dvp.receiveCash(m, _attest(m), _iss(m));
+        bytes memory ack = _lastMessage();
+        home.receiveMessage(ack, _attest(ack), _iss(ack));
+        assertEq(ledger.member(BANK_A).remoteSupply, 10_020_000 * M, "counted abroad once the mint is acknowledged");
+        assertEq(dtA.balanceOf(address(home)), 0, "the escrow burned");
 
         assertEq(uint8(dvp.trade(id).status), uint8(DvPSettlement.Status.Settled));
         assertEq(tbill.balanceOf(buyer), 10_000 * SHARE, "buyer has the fund shares");
@@ -223,7 +231,11 @@ contract DvPTest is DvPBase {
         vm.prank(seller);
         remote.depositForBurn(BANK_A, 10_020_000 * M, HOME, seller);
         bytes memory m = _lastMessage();
+        vm.recordLogs();
         home.receiveMessage(m, _attest(m), _iss(m));
+        bytes memory ack = _lastMessage();
+        remote.receiveMessage(ack, _attest(ack), _iss(ack));
+        assertEq(cash.totalSupply(), 0, "the escrow abroad burned");
         assertEq(dtA.balanceOf(seller), 10_020_000 * M);
         assertEq(ledger.member(BANK_A).remoteSupply, 0);
         assertEq(home.outstanding(BANK_A, REMOTE), 0);
@@ -293,10 +305,13 @@ contract DvPTest is DvPBase {
         bytes memory m = _sendCash(id, 1_000_000);
         vm.warp(block.timestamp + 3 hours);
 
+        vm.recordLogs();
         vm.expectEmit(true, true, true, true, address(dvp));
         emit DvPSettlement.CashCredited(id, buyer, address(cash), 1_000_000 * M, DvPSettlement.CreditReason.PastDeadline);
         dvp.receiveCash(m, _attest(m), _iss(m));
         assertEq(dvp.credit(address(cash), buyer), 1_000_000 * M);
+        bytes memory ack = _lastMessage(); // home counts the cash abroad
+        home.receiveMessage(ack, _attest(ack), _iss(ack));
 
         vm.recordLogs();
         vm.prank(buyer);

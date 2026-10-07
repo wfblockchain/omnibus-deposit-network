@@ -26,7 +26,7 @@ type BankSpec struct {
 	RequiresAcceptance bool   // inbound cross-bank payments wait for its accept
 }
 
-// TCHKeys are the operator's separated operating keys.
+// OperatorKeys are the operator's separated operating keys.
 type OperatorKeys struct {
 	Admin      chain.Account // deploys; would sit behind a multisig and timelock
 	Governor   chain.Account // admits and suspends members

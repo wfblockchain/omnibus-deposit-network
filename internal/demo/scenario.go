@@ -105,7 +105,7 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 		{MemberID: bankBID, Name: "Bank B", Ticker: "B-dT", ABA: "234567898", MasterAccount: "FRB-MASTER-234567898", RequiresAcceptance: true},
 		{MemberID: bankCID, Name: "Bank C", Ticker: "C-dT", ABA: bankCABA, MasterAccount: "FRB-MASTER-012345672", RequiresAcceptance: false},
 	}
-	tchKeys, err := omnibus.NewOperatorKeys()
+	opKeys, err := omnibus.NewOperatorKeys()
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 			return nil, err
 		}
 	}
-	net, err := omnibus.Deploy(ctx, c, tchKeys, specs, bankKeys)
+	net, err := omnibus.Deploy(ctx, c, opKeys, specs, bankKeys)
 	if err != nil {
 		return nil, fmt.Errorf("deploy: %w", err)
 	}

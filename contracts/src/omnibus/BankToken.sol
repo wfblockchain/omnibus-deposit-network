@@ -50,9 +50,12 @@ contract BankToken is ERC20, AccessControlDefaultAdminRules, Pausable, IERC7943F
     /// @notice The bank's compliance function.
     bytes32 public constant COMPLIANCE_ROLE = keccak256("COMPLIANCE_ROLE");
 
-    /// @notice The cross-chain messenger: burns tokens leaving for another
-    ///         chain and mints tokens returning from one. It never touches
-    ///         the ledger's encumbrance; backing stays in the omnibus.
+    /// @notice The cross-chain messenger: escrows tokens leaving for another
+    ///         chain, burns that escrow once their mint there is proven (or
+    ///         returns it if the move is cancelled), and mints tokens
+    ///         arriving from one. It never touches the ledger's encumbrance;
+    ///         backing stays in the omnibus. A messenger is never an ordinary
+    ///         holder: its escrow moves only through the messenger legs.
     bytes32 public constant MESSENGER_ROLE = keccak256("MESSENGER_ROLE");
 
     /// @notice The issuing bank's emergency stop: no transfer, mint, burn,
@@ -111,6 +114,7 @@ contract BankToken is ERC20, AccessControlDefaultAdminRules, Pausable, IERC7943F
     error HoldsOutstanding(address account, uint256 held);
     error OnlyLedger(address caller);
     error TokenRetired();
+    error EscrowAccount(address account);
 
     constructor(
         string memory name_,
@@ -234,16 +238,37 @@ contract BankToken is ERC20, AccessControlDefaultAdminRules, Pausable, IERC7943F
     }
 
     /*//////////////////////////////////////////////////////////////////////////
-                    Cross-chain legs (burn here, mint there)
+            Cross-chain legs (lock here, mint there, then burn here)
     //////////////////////////////////////////////////////////////////////////*/
 
-    /// @notice Burns a sender's tokens that are leaving for another chain.
-    ///         The messenger calls it only for the sender that called it.
-    function messengerBurn(address from, uint256 amount) external onlyRole(MESSENGER_ROLE) {
+    /// @notice Escrows a sender's tokens that are leaving for another chain.
+    ///         The messenger calls it only for the sender that called it. The
+    ///         tokens stay in this ticker's supply, and so stay backed, until
+    ///         their mint on the other chain is proven.
+    function messengerLock(address from, uint256 amount) external onlyRole(MESSENGER_ROLE) {
+        _requireLive();
         if (!canSend(from)) revert ERC7943CannotSend(from);
         uint256 a = availableBalanceOf(from);
         if (amount > a) revert InsufficientAvailable(from, amount, a);
-        _burn(from, amount);
+        super._update(from, msg.sender, amount);
+    }
+
+    /// @notice Burns escrow whose mint on the other chain is proven.
+    function messengerBurnLocked(uint256 amount) external onlyRole(MESSENGER_ROLE) {
+        _requireLive();
+        super._update(msg.sender, address(0), amount);
+    }
+
+    /// @notice Returns escrow of a cancelled move to an admitted holder.
+    function messengerUnlock(address to, uint256 amount) external onlyRole(MESSENGER_ROLE) {
+        _requireLive();
+        if (!canReceive(to)) revert ERC7943CannotReceive(to);
+        super._update(msg.sender, to, amount);
+    }
+
+    function _requireLive() internal view {
+        if (retired) revert TokenRetired();
+        _requireNotPaused();
     }
 
     /// @notice Mints tokens returning from another chain, on an attested
@@ -258,12 +283,18 @@ contract BankToken is ERC20, AccessControlDefaultAdminRules, Pausable, IERC7943F
 
     /// @notice The issuer's own holders, plus every member bank's registered
     ///         settlement wallet: banks hold each other's tokenized deposits.
+    ///         Never a messenger: its escrow is not a holding.
     function canSend(address account) public view returns (bool) {
-        return !blocked[account] && (policy.isAuthorized(account) || LEDGER.memberOfWallet(account) != bytes32(0));
+        return _isHolder(account);
     }
 
     function canReceive(address account) public view returns (bool) {
-        return !blocked[account] && (policy.isAuthorized(account) || LEDGER.memberOfWallet(account) != bytes32(0));
+        return _isHolder(account);
+    }
+
+    function _isHolder(address account) internal view returns (bool) {
+        return !blocked[account] && !hasRole(MESSENGER_ROLE, account)
+            && (policy.isAuthorized(account) || LEDGER.memberOfWallet(account) != bytes32(0));
     }
 
     function canTransfer(address from, address to, uint256 amount) external view returns (bool) {
@@ -293,6 +324,7 @@ contract BankToken is ERC20, AccessControlDefaultAdminRules, Pausable, IERC7943F
 
     function setFrozenTokens(address account, uint256 amount) external onlyRole(COMPLIANCE_ROLE) returns (bool) {
         if (account == address(0)) revert ZeroAddress();
+        if (hasRole(MESSENGER_ROLE, account)) revert EscrowAccount(account);
         _frozen[account] = amount;
         emit Frozen(account, amount);
         return true;
@@ -310,6 +342,7 @@ contract BankToken is ERC20, AccessControlDefaultAdminRules, Pausable, IERC7943F
         if (retired) revert TokenRetired();
         if (from == address(0) || to == address(0)) revert ZeroAddress();
         if (from == to) revert SelfTransfer();
+        if (hasRole(MESSENGER_ROLE, from)) revert EscrowAccount(from);
         if (!canReceive(to)) revert ERC7943CannotReceive(to);
         uint256 bal = balanceOf(from);
         uint256 h = _held[from];
@@ -337,6 +370,7 @@ contract BankToken is ERC20, AccessControlDefaultAdminRules, Pausable, IERC7943F
         if (retired) revert TokenRetired();
         if (lost == address(0) || replacement == address(0)) revert ZeroAddress();
         if (lost == replacement) revert SelfTransfer();
+        if (hasRole(MESSENGER_ROLE, lost)) revert EscrowAccount(lost);
         if (!canReceive(replacement)) revert ERC7943CannotReceive(replacement);
         if (_held[lost] != 0) revert HoldsOutstanding(lost, _held[lost]);
 

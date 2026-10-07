@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
+import { console } from "forge-std/console.sol";
 import { StdInvariant } from "forge-std/StdInvariant.sol";
 import { Vm } from "forge-std/Vm.sol";
 import { OmnibusLedger } from "src/omnibus/OmnibusLedger.sol";
@@ -43,18 +44,42 @@ contract NetworkHandler is Test {
     uint256[3] public attesterKeys;
 
     uint256 public ghostFed;
-    uint256[3] public inFlight; // burned on one side, not yet minted on the other
     uint256 public nonce;
     bytes32[] public queued;
 
+    /// A message waiting to be applied: a TRANSFER on its destination, or a
+    /// MINT_ACK / MINT_CANCEL back on the move's source.
     struct Msg {
         bool toRemote;
-        uint256 bank;
-        uint256 amount;
+        uint8 kind;
+        uint256 move; // index into `moves`
         bytes body;
     }
 
     Msg[] public msgs;
+
+    /// Every move ever sent, with what the handler saw happen to it.
+    struct GhostMove {
+        bool fromHome;
+        uint256 bank;
+        uint64 nonce;
+        uint256 amount;
+        bool minted;
+        bool cancelled;
+        bool completed;
+        bool returned;
+        bytes transfer;
+    }
+
+    GhostMove[] public moves;
+
+    /// Minted on the destination, acknowledgement not yet applied at the
+    /// source: the escrow there is about to burn.
+    uint256[3] public mintedUnacked;
+    /// In escrow on the source, not yet completed or returned.
+    uint256[3] public pending;
+    /// Replays of a spent TRANSFER that succeeded (must stay zero).
+    uint256 public replaysAccepted;
 
     /// Actions that actually executed (not early returns), for coverage.
     mapping(bytes32 => uint256) public done;
@@ -220,76 +245,157 @@ contract NetworkHandler is Test {
     }
 
     function crossOut(uint8 b, uint8 h, uint64 amt) external {
-        uint256 i = b % 3;
-        address who = holders[h % 4];
-        uint256 avail = tokens[i].availableBalanceOf(who);
-        if (avail == 0) return;
-        uint256 a = bound(amt, 1, avail);
-        vm.recordLogs();
-        vm.prank(who);
-        home.depositForBurn(ids[i], a, 7, who);
-        msgs.push(Msg(true, i, a, _lastMessage()));
-        inFlight[i] += a;
+        _send(true, b, h, amt, false);
     }
 
     function crossBack(uint8 b, uint8 h, uint64 amt) external {
-        uint256 i = b % 3;
-        address who = holders[h % 4];
-        uint256 bal = remoteTokens[i].balanceOf(who);
-        if (bal == 0) return;
-        uint256 a = bound(amt, 1, bal);
-        vm.recordLogs();
-        vm.prank(who);
-        remote.depositForBurn(ids[i], a, 0, who);
-        msgs.push(Msg(false, i, a, _lastMessage()));
-        inFlight[i] += a;
+        _send(false, b, h, amt, false);
     }
 
     /// Sends to a wallet no bank admits on the other side: undeliverable,
-    /// it can only come back by bounce.
+    /// it can only be cancelled.
     function crossOutStray(uint8 b, uint8 h, uint64 amt) external {
+        _send(true, b, h, amt, true);
+    }
+
+    function crossBackStray(uint8 b, uint8 h, uint64 amt) external {
+        _send(false, b, h, amt, true);
+    }
+
+    function _send(bool fromHome, uint8 b, uint8 h, uint64 amt, bool stray) internal {
         uint256 i = b % 3;
         address who = holders[h % 4];
-        uint256 avail = tokens[i].availableBalanceOf(who);
+        uint256 avail =
+            fromHome ? tokens[i].availableBalanceOf(who) : remoteTokens[i].unfrozenBalanceOf(who);
         if (avail == 0) return;
-        uint256 a = bound(amt, 1, avail);
+        // Up to most of a bucket, so buckets drain and refill but most moves fit.
+        uint256 a = bound(amt, 1, avail < 250_000 * M ? avail : 250_000 * M);
+        address to = stray ? address(0x5717A7) : who;
         vm.recordLogs();
         vm.prank(who);
-        home.depositForBurn(ids[i], a, 7, address(0x5717A7));
-        msgs.push(Msg(true, i, a, _lastMessage()));
-        inFlight[i] += a;
+        uint64 n = (fromHome ? home : remote).depositForBurn(ids[i], a, fromHome ? 7 : 0, to);
+        bytes memory body = _lastMessage();
+        moves.push(GhostMove(fromHome, i, n, a, false, false, false, false, body));
+        msgs.push(Msg(fromHome, 0, moves.length - 1, body));
+        pending[i] += a;
+        done["sent"]++;
     }
 
-    /// Bounces a pending message if it is undeliverable; its RETURN replaces
-    /// it in flight, same amount, the other way.
-    function bounceOne(uint256 k) external {
-        if (msgs.length == 0) return;
-        uint256 idx = k % msgs.length;
-        Msg memory m = msgs[idx];
-        bytes[] memory sigs = _attest(m.body);
-        bytes memory iss = _issuerSig(m.body, m.bank);
-        vm.recordLogs();
-        if (m.toRemote) {
-            try remote.bounce(m.body, sigs, iss) { } catch { return; }
-        } else {
-            try home.bounce(m.body, sigs, iss) { } catch { return; }
+    /// Relays the newest message that applies, trying up to four from the
+    /// newest back, as a live relayer retries what is waiting. A message that
+    /// cannot apply yet (rate limit, corridor not yet acknowledged, expired,
+    /// undeliverable) stays queued.
+    function deliver(uint256) external {
+        uint256 n = msgs.length;
+        for (uint256 j = 0; j < 4 && j < n; j++) {
+            if (_deliver(n - 1 - j)) return;
         }
-        msgs[idx] = Msg(!m.toRemote, m.bank, m.amount, _lastMessage());
-        done["bounce"]++;
     }
 
-    function deliver(uint256 k) external {
+    /// Relays one waiting message picked at random, however old.
+    function deliverAny(uint256 k) external {
         if (msgs.length == 0) return;
-        uint256 idx = k % msgs.length;
+        _deliver(k % msgs.length);
+    }
+
+    function _deliver(uint256 idx) internal returns (bool) {
         Msg memory m = msgs[idx];
+        GhostMove storage g = moves[m.move];
+        bytes[] memory sigs = _attest(m.body);
+        bytes memory iss = _issuerSig(m.body, g.bank);
+        CrossChainMessenger on = m.toRemote ? remote : home;
+        vm.recordLogs();
+        try on.receiveMessage(m.body, sigs, iss) { }
+        catch (bytes memory err) {
+            if (bytes4(err) == CrossChainMessenger.RateLimited.selector) done["rateLimited"]++;
+            if (bytes4(err) == CrossChainMessenger.Expired.selector) done["expired"]++;
+            return false;
+        }
+        _drop(idx);
+        if (m.kind == 0) {
+            if (g.minted || g.cancelled) replaysAccepted++;
+            g.minted = true;
+            mintedUnacked[g.bank] += g.amount;
+            msgs.push(Msg(!m.toRemote, 3, m.move, _lastMessage()));
+            done["minted"]++;
+        } else if (m.kind == 3) {
+            g.completed = true;
+            mintedUnacked[g.bank] -= g.amount;
+            pending[g.bank] -= g.amount;
+            done["completed"]++;
+        } else {
+            g.returned = true;
+            pending[g.bank] -= g.amount;
+            done["cancelled"]++;
+        }
+        return true;
+    }
+
+    /// Cancels a waiting TRANSFER on its destination, if it may be (past its
+    /// deadline, or its recipient cannot hold the token there), trying up to
+    /// four from a random start.
+    function cancelOne(uint256 k) external {
+        uint256 n = msgs.length;
+        for (uint256 j = 0; j < 4 && j < n; j++) {
+            if (_cancel((k % n + j) % n)) return;
+        }
+    }
+
+    function _cancel(uint256 idx) internal returns (bool) {
+        Msg memory m = msgs[idx];
+        if (m.kind != 0) return false;
+        GhostMove storage g = moves[m.move];
+        CrossChainMessenger on = m.toRemote ? remote : home;
+        vm.recordLogs();
+        try on.cancel(m.body, _attest(m.body), _issuerSig(m.body, g.bank)) { }
+        catch {
+            return false;
+        }
+        if (g.minted || g.cancelled) replaysAccepted++;
+        g.cancelled = true;
+        _drop(idx);
+        msgs.push(Msg(!m.toRemote, 4, m.move, _lastMessage()));
+        done["cancelRecorded"]++;
+        return true;
+    }
+
+    /// Tries to mint or cancel a TRANSFER that was already minted or cancelled.
+    function replay(uint256 k, bool viaCancel) external {
+        if (moves.length == 0) return;
+        GhostMove storage g = moves[k % moves.length];
+        if (!g.minted && !g.cancelled) return;
+        CrossChainMessenger on = g.fromHome ? remote : home;
+        bytes[] memory sigs = _attest(g.transfer);
+        bytes memory iss = _issuerSig(g.transfer, g.bank);
+        done["replayTried"]++;
+        if (viaCancel) {
+            try on.cancel(g.transfer, sigs, iss) {
+                replaysAccepted++;
+            } catch { }
+        } else {
+            try on.receiveMessage(g.transfer, sigs, iss) {
+                replaysAccepted++;
+            } catch { }
+        }
+    }
+
+    /// Time passes: buckets refill and deadlines lapse.
+    function wait(uint32 dt) external {
+        vm.warp(block.timestamp + bound(dt, 1 minutes, 8 hours));
+    }
+
+    function _drop(uint256 idx) internal {
         msgs[idx] = msgs[msgs.length - 1];
         msgs.pop();
-        bytes[] memory sigs = _attest(m.body);
-        bytes memory iss = _issuerSig(m.body, m.bank);
-        if (m.toRemote) remote.receiveMessage(m.body, sigs, iss);
-        else home.receiveMessage(m.body, sigs, iss);
-        inFlight[m.bank] -= m.amount;
-        done[m.toRemote ? bytes32("deliverOut") : bytes32("deliverBack")]++;
+    }
+
+    function movesLength() external view returns (uint256) {
+        return moves.length;
+    }
+
+    function moveAt(uint256 j) external view returns (bool fromHome, uint256 bank, uint64 n, bool minted, bool cancelled) {
+        GhostMove storage g = moves[j];
+        return (g.fromHome, g.bank, g.nonce, g.minted, g.cancelled);
     }
 
     /* helpers */
@@ -352,8 +458,12 @@ contract NetworkHandler is Test {
         sigs[1] = abi.encodePacked(r, s, v);
     }
 
-    function inFlightOf(uint256 i) external view returns (uint256) {
-        return inFlight[i];
+    function mintedUnackedOf(uint256 i) external view returns (uint256) {
+        return mintedUnacked[i];
+    }
+
+    function pendingOf(uint256 i) external view returns (uint256) {
+        return pending[i];
     }
 
 }
@@ -393,6 +503,8 @@ contract NetworkInvariantTest is StdInvariant, Test {
         remote.setThreshold(2);
         home.setRemote(7, address(remote));
         remote.setRemote(0, address(home));
+        home.setMoveTimeout(7 days);
+        remote.setMoveTimeout(7 days);
 
         address[4] memory hs = [makeAddr("h0"), makeAddr("h1"), makeAddr("h2"), makeAddr("h3")];
         address[3][4] memory keys;
@@ -423,6 +535,9 @@ contract NetworkInvariantTest is StdInvariant, Test {
             remote.setSupplyCap(ids[i], type(uint256).max);
             home.setIssuerAttester(ids[i], vm.addr(issuerKeyOf(i)));
             remote.setIssuerAttester(ids[i], vm.addr(issuerKeyOf(i)));
+            // Buckets small enough that some moves wait or are cancelled.
+            home.setRateLimit(7, ids[i], uint128(200_000 * M), 1 days);
+            remote.setRateLimit(0, ids[i], uint128(200_000 * M), 1 days);
             vm.prank(funding);
             ledger.creditFunding(ids[i], 1_000_000 * M, keccak256(abi.encode("seed", i)));
         }
@@ -431,7 +546,7 @@ contract NetworkInvariantTest is StdInvariant, Test {
         handler = new NetworkHandler(
             ledger, router, netting, home, remote, tokens, remoteTokens, ids, keys, hs, funding, so, ak, 3_000_000 * M
         );
-        bytes4[] memory sel = new bytes4[](15);
+        bytes4[] memory sel = new bytes4[](20);
         sel[0] = NetworkHandler.fund.selector;
         sel[1] = NetworkHandler.mint.selector;
         sel[2] = NetworkHandler.pay.selector;
@@ -446,7 +561,12 @@ contract NetworkInvariantTest is StdInvariant, Test {
         sel[11] = NetworkHandler.crossBack.selector;
         sel[12] = NetworkHandler.deliver.selector;
         sel[13] = NetworkHandler.crossOutStray.selector;
-        sel[14] = NetworkHandler.bounceOne.selector;
+        sel[14] = NetworkHandler.cancelOne.selector;
+        sel[15] = NetworkHandler.crossBackStray.selector;
+        sel[16] = NetworkHandler.replay.selector;
+        sel[17] = NetworkHandler.wait.selector;
+        sel[18] = NetworkHandler.deliver.selector; // relaying is most of the traffic
+        sel[19] = NetworkHandler.deliverAny.selector;
         targetSelector(FuzzSelector({ addr: address(handler), selectors: sel }));
         targetContract(address(handler));
     }
@@ -459,11 +579,92 @@ contract NetworkInvariantTest is StdInvariant, Test {
         assertTrue(ledger.invariantsHold());
     }
 
-    /// Recorded remote supply = tokens on the other chain + messages in flight.
+    /// Recorded remote supply = tokens on the other chain, less those minted
+    /// on one side whose escrow on the other has not yet burned.
     function invariant_RemoteSupplyIsExact() public view {
         for (uint256 i = 0; i < 3; i++) {
-            assertEq(ledger.member(ids[i]).remoteSupply, remoteTokens[i].totalSupply() + handler.inFlightOf(i));
+            assertEq(
+                ledger.member(ids[i]).remoteSupply + handler.mintedUnackedOf(i), remoteTokens[i].totalSupply()
+            );
         }
+    }
+
+    /// Across both chains: what circulates, plus escrow whose mint has not
+    /// happened, is exactly the bank's backing. Escrow is held in full by
+    /// each messenger and matches the moves still pending.
+    function invariant_EscrowPlusSupplyConservedAcrossChains() public view {
+        CrossChainMessenger h = handler.home();
+        CrossChainMessenger r = handler.remote();
+        for (uint256 i = 0; i < 3; i++) {
+            uint256 hEsc = tokens[i].balanceOf(address(h));
+            uint256 rEsc = remoteTokens[i].balanceOf(address(r));
+            assertEq(hEsc, h.escrowed(ids[i]), "home escrow held in full");
+            assertEq(rEsc, r.escrowed(ids[i]), "remote escrow held in full");
+            assertEq(hEsc + rEsc, handler.pendingOf(i), "escrow == pending moves");
+            uint256 circulating = tokens[i].totalSupply() - hEsc + remoteTokens[i].totalSupply() - rEsc;
+            uint256 unminted = hEsc + rEsc - handler.mintedUnackedOf(i);
+            assertEq(circulating + unminted, ledger.member(ids[i]).backing);
+        }
+    }
+
+    /// A TRANSFER is minted or cancelled on its destination, never both; its
+    /// source completes only what was minted and returns only what was
+    /// cancelled.
+    function invariant_NoNonceBothMintedAndCancelled() public view {
+        assertEq(handler.replaysAccepted(), 0, "a spent TRANSFER applied again");
+        CrossChainMessenger h = handler.home();
+        CrossChainMessenger r = handler.remote();
+        uint256 n = handler.movesLength();
+        for (uint256 j = 0; j < n; j++) {
+            (bool fromHome,, uint64 nn, bool minted, bool cancelled) = handler.moveAt(j);
+            assertFalse(minted && cancelled);
+            CrossChainMessenger src = fromHome ? h : r;
+            CrossChainMessenger dst = fromHome ? r : h;
+            CrossChainMessenger.Inbound ib = dst.inbound(fromHome ? 0 : 7, nn);
+            (CrossChainMessenger.MoveStatus st,,,,,) = src.moves(nn);
+            if (minted) assertEq(uint8(ib), uint8(CrossChainMessenger.Inbound.Minted));
+            if (cancelled) assertEq(uint8(ib), uint8(CrossChainMessenger.Inbound.Cancelled));
+            if (!minted && !cancelled) assertEq(uint8(ib), uint8(CrossChainMessenger.Inbound.None));
+            if (st == CrossChainMessenger.MoveStatus.Completed) {
+                assertEq(uint8(ib), uint8(CrossChainMessenger.Inbound.Minted));
+            }
+            if (st == CrossChainMessenger.MoveStatus.Cancelled) {
+                assertEq(uint8(ib), uint8(CrossChainMessenger.Inbound.Cancelled));
+            }
+        }
+    }
+
+    /// Coverage: every run must actually complete and cancel moves, or the
+    /// invariants above would hold vacuously. Set XCHAIN_COVERAGE_LOG to a
+    /// path under ./deployments to collect every run's counts.
+    function afterInvariant() external {
+        string memory line = string.concat(
+            "sent=",
+            vm.toString(handler.done("sent")),
+            " minted=",
+            vm.toString(handler.done("minted")),
+            " completed=",
+            vm.toString(handler.done("completed")),
+            " cancelRecorded=",
+            vm.toString(handler.done("cancelRecorded")),
+            " cancelled=",
+            vm.toString(handler.done("cancelled"))
+        );
+        line = string.concat(
+            line,
+            " rateLimited=",
+            vm.toString(handler.done("rateLimited")),
+            " expired=",
+            vm.toString(handler.done("expired")),
+            " replayTried=",
+            vm.toString(handler.done("replayTried"))
+        );
+        console.log("xchain-coverage", line);
+        string memory path = vm.envOr("XCHAIN_COVERAGE_LOG", string(""));
+        if (bytes(path).length != 0) vm.writeLine(path, line);
+        assertGt(handler.done("completed"), 0, "no move completed");
+        assertGt(handler.done("cancelled"), 0, "no move cancelled");
+        assertGt(handler.done("minted"), 0, "no mint");
     }
 
     /// With one other chain, that chain's corridor carries the whole remote

@@ -124,13 +124,15 @@ Step-by-step versions: [business-flows.md](docs/business-flows.md) and
 
 ## Beyond the home chain
 
-**Cross-chain, burn and mint.** `crosschain/CrossChainMessenger` moves a
+**Cross-chain, lock, mint, then burn.** `crosschain/CrossChainMessenger` moves a
 member's tokens to and from other chains the way CCTP moves USDC, with the
 backing staying in the joint account. Every mint needs **two keys**, the
 network's attester threshold and the issuing bank's own signature, so no one
 else can create a bank's deposits anywhere. Home caps each corridor and every
-other chain caps each member's supply; other chains talk only to home;
-undeliverable transfers bounce back; a bank's revocations follow its token.
+other chain caps each member's supply; every receiving chain rate-limits what
+arrives; nothing burns at the source until the mint is acknowledged, and a
+move that cannot mint is cancelled and its escrow returned; other chains talk
+only to home; a bank's revocations follow its token.
 
 **DvP where the asset lives.** `dvp/DvPSettlement` settles a tokenized
 security against a bank's deposit token on the security's own chain, gross

@@ -254,7 +254,7 @@ var N = {
   any:    {x: 978, y: 34, w: 194, h: 68, t: 'Holders & anyone', s: 'payers · relayers · keepers', kind: 'actor', tone: 'var(--ink-3)'},
 
   router: {x: 296, y: 162, w: 200, h: 58, t: 'PaymentRouter', s: 'pay · accept · reject', kind: 'contract', tone: 'var(--home)'},
-  msgH:   {x: 564, y: 162, w: 200, h: 58, t: 'CrossChainMessenger', s: 'home · burn, attest, mint', kind: 'contract', tone: 'var(--home)'},
+  msgH:   {x: 564, y: 162, w: 200, h: 58, t: 'CrossChainMessenger', s: 'home · lock, attest, mint, burn', kind: 'contract', tone: 'var(--home)'},
   tokA:   {x: 36,  y: 244, w: 200, h: 58, t: 'BankToken · A-dT', s: 'Bank A’s deposit token', kind: 'contract', tone: 'var(--bank-a)'},
   regA:   {x: 36,  y: 322, w: 200, h: 46, t: 'HolderRegistry · A', s: 'Bank A’s allowlist', kind: 'contract', tone: 'var(--bank-a)'},
   ledger: {x: 296, y: 262, w: 200, h: 88, t: 'OmnibusLedger', s: 'position =', kind: 'contract', tone: 'var(--home)'},
@@ -293,13 +293,13 @@ var E = [
   ['cycle', 'op', 'netting', 'settleCycle', 'call', false, 70],
   ['applyNet', 'netting', 'ledger', 'applyNet', 'call', true, 0],
   ['burnSend', 'any', 'msgH', 'depositForBurn', 'call', false, 0],
-  ['msgBurn', 'msgH', 'tokA', 'messengerBurn · messengerMint', 'call', true, 70],
+  ['msgBurn', 'msgH', 'tokA', 'messengerLock · messengerBurnLocked · messengerUnlock · messengerMint', 'call', true, 70],
   ['remote', 'msgH', 'ledger', 'recordRemote', 'call', true, 0],
   ['wire', 'msgH', 'msgR', 'attested message', 'msg', true, 0],
   ['attest', 'att', 'msgR', 'm-of-n signatures', 'msg', false, 0],
   ['issuerSig', 'bankA', 'msgR', 'issuer signature', 'msg', false, 20],
-  ['relay', 'any', 'msgR', 'receiveMessage · bounce', 'call', false, -20],
-  ['rmint', 'msgR', 'rtokA', 'messengerMint · messengerBurn', 'call', true, 0],
+  ['relay', 'any', 'msgR', 'receiveMessage · cancel', 'call', false, -20],
+  ['rmint', 'msgR', 'rtokA', 'messengerMint · messengerLock · messengerBurnLocked · messengerUnlock', 'call', true, 0],
   ['revoke', 'msgR', 'rregA', 'revoke', 'call', true, -70],
   ['sendRevoke', 'bankA', 'msgH', 'sendRevocation', 'call', false, 30],
   ['affirm', 'any', 'dvp', 'affirm · affirmFor', 'call', false, 0],
@@ -350,20 +350,21 @@ var FLOWS = [
     ['cycle', ['op', 'netting'], 'OmnibusNetting.settleCycle(cycleId, members, nets, discharged)', 'OPERATOR_ROLE', 'The operator submits a plan from the netting planner.'],
     ['applyNet', ['netting', 'ledger'], 'OmnibusLedger.applyNet(members, nets)', 'NETTING_ROLE', 'Nets must sum to zero and every net debit must be fundable from free position.']
   ]},
-  {id: 'xchain', t: 'Tokens to another chain', s: 'Burn at home, attest, mint abroad. The backing never leaves the joint account; home counts the supply abroad per chain. Every mint needs two keys.', steps: [
-    ['burnSend', ['any', 'msgH'], 'CrossChainMessenger.depositForBurn(member, amount, dest, recipient)', 'the holder', 'Refused above the corridor cap for that bank and chain.'],
-    ['msgBurn', ['msgH', 'tokA'], 'BankToken.messengerBurn(from, amount)', 'MESSENGER_ROLE', 'The tokens burn at home.'],
-    ['remote', ['msgH', 'ledger'], 'OmnibusLedger.recordRemote(member, +amount)', 'MESSENGER_ROLE', 'Backing now covers home supply + remote supply.'],
-    ['attest', ['att', 'msgR'], 'threshold signatures over the message', 'network attesters', 'A strict majority signs, only once the burn is final.'],
+  {id: 'xchain', t: 'Tokens to another chain', s: 'Lock at home, attest, mint abroad, then burn the escrow on the attested acknowledgement. Nothing burns before its mint is proven. The backing never leaves the joint account; home counts the supply abroad per chain once minted. Every message needs two keys.', steps: [
+    ['burnSend', ['any', 'msgH'], 'CrossChainMessenger.depositForBurn(member, amount, dest, recipient)', 'the holder', 'Refused above the corridor cap (minted plus pending) for that bank and chain. The move is PENDING, with a deadline.'],
+    ['msgBurn', ['msgH', 'tokA'], 'BankToken.messengerLock(from, amount)', 'MESSENGER_ROLE', 'The tokens move into the messenger’s escrow; they stay in home supply.'],
+    ['attest', ['att', 'msgR'], 'threshold signatures over the message', 'network attesters', 'A strict majority signs, only once the lock is final.'],
     ['issuerSig', ['bankA', 'msgR'], 'issuer signature over the same message', 'Bank A’s own key', 'The second key: no one but the issuing bank can create its deposits abroad.'],
-    ['relay', ['any', 'msgR'], 'CrossChainMessenger.receiveMessage(message, signatures, issuerSignature)', 'anyone (or the named destination caller)', 'Checks attestations, source, nonce and the chain’s supply cap.'],
-    ['rmint', ['msgR', 'rtokA'], 'RemoteBankToken.messengerMint(recipient, amount)', 'messenger only', 'Minted to an admitted holder; an unadmitted recipient makes the message undeliverable, so it bounces.']
+    ['relay', ['any', 'msgR'], 'CrossChainMessenger.receiveMessage(message, signatures, issuerSignature)', 'anyone (or the named destination caller)', 'Checks attestations, source, nonce, the deadline, the chain’s supply cap and its inbound rate limit; over the limit it reverts and is retried later.'],
+    ['rmint', ['msgR', 'rtokA'], 'RemoteBankToken.messengerMint(recipient, amount)', 'messenger only', 'Minted to an admitted holder; the nonce is MINTED and a MINT_ACK goes back.'],
+    ['wire', ['msgR', 'msgH'], 'MINT_ACK message', 'attested + issuer key', 'Proof of the mint, signed once it is final.'],
+    ['msgBurn', ['msgH', 'tokA'], 'BankToken.messengerBurnLocked(amount)', 'MESSENGER_ROLE', 'The escrow burns: the move is COMPLETED.'],
+    ['remote', ['msgH', 'ledger'], 'OmnibusLedger.recordRemote(member, +amount)', 'MESSENGER_ROLE', 'Backing now covers home supply + remote supply.']
   ]},
-  {id: 'bounce', t: 'Bounce and return', s: 'A transfer whose recipient cannot hold the token abroad is sent back with the same attestations. Its nonce is spent, so it can never mint later.', steps: [
-    ['relay', ['any', 'msgR'], 'CrossChainMessenger.bounce(message, signatures, issuerSignature)', 'anyone', 'Allowed only when the recipient cannot receive (a paused token makes a message wait instead).'],
-    ['wire', ['msgR', 'msgH'], 'RETURN message', 'attested', 'A return to the sender’s returnTo, attested like any message.'],
-    ['msgBurn', ['msgH', 'tokA'], 'BankToken.messengerMint(returnTo, amount)', 'MESSENGER_ROLE', 'Re-minted at home; if returnTo cannot hold it, it lands in the bank’s suspense wallet.'],
-    ['remote', ['msgH', 'ledger'], 'OmnibusLedger.recordRemote(member, −amount)', 'MESSENGER_ROLE', 'Home’s corridor count falls back; home never takes back more than it sent.']
+  {id: 'cancel', t: 'Cancel and return', s: 'A move that cannot mint (past its deadline, or a recipient who cannot hold the token) is cancelled on the destination. Its nonce can never mint, and the escrow comes back.', steps: [
+    ['relay', ['any', 'msgR'], 'CrossChainMessenger.cancel(message, signatures, issuerSignature)', 'anyone', 'After the deadline, or at once if the recipient cannot receive (a paused token or a full bucket makes a message wait instead). Works while the messenger is paused.'],
+    ['wire', ['msgR', 'msgH'], 'MINT_CANCEL message', 'attested + issuer key', 'Must match a pending move; its release draws on home’s inbound rate limit.'],
+    ['msgBurn', ['msgH', 'tokA'], 'BankToken.messengerUnlock(returnTo, amount)', 'MESSENGER_ROLE', 'The escrow returns; if returnTo cannot hold it, it lands in the bank’s suspense wallet. Nothing was ever counted abroad.']
   ]},
   {id: 'revoke', t: 'Revocation follows the token', s: 'When a bank drops a holder, the revocation is broadcast from home and applied abroad on arrival. Admissions stay local, so a hub key can only restrict.', steps: [
     ['sendRevoke', ['bankA', 'msgH'], 'CrossChainMessenger.sendRevocation(member, account, dest, reason)', 'Bank A registrar', 'Only the bank’s own registrar at home may broadcast.'],
@@ -405,7 +406,7 @@ var INSP = {
   ]},
   tokA: {path: 'contracts/src/omnibus/BankToken.sol', what: 'One bank’s deposit token (ERC-20 with ERC-7943 compliance). Every mint encumbers the bank’s position; holds reserve balances for pending payments.', state: ['balances, frozen, held, totalHeld', 'blocked (lost keys)', 'policy (holder registry)', 'paused, retired', 'migrated (as a successor)'], groups: [
     ['bank', 'Bank A', ['mint, redeemFrom (issuer)', 'setFrozenTokens, forcedTransfer, recover (compliance)', 'pause, unpause (pauser)', 'setPolicy (admin)']],
-    ['net', 'Network contracts', ['hold, releaseHold, burnHeld, routerBurn, routerMint (router)', 'messengerBurn, messengerMint (messenger)', 'retire (ledger)']],
+    ['net', 'Network contracts', ['hold, releaseHold, burnHeld, routerBurn, routerMint (router)', 'messengerLock, messengerBurnLocked, messengerUnlock, messengerMint (messenger)', 'retire (ledger)']],
     ['any', 'Holders and anyone', ['transfer (admitted holders)', 'redeem', 'migrateBalances (as a successor)', 'canTransfer (view)']]
   ]},
   tokB: null, tokA2: null,
@@ -426,16 +427,16 @@ var INSP = {
     ['bank', 'Bank registrar', ['authorize', 'revoke']],
     ['net', 'Messenger (abroad)', ['revoke (broadcast from home)']]
   ]},
-  msgH: {path: 'contracts/src/omnibus/crosschain/CrossChainMessenger.sol', what: 'Burn-and-mint messenger. At home it caps each corridor and counts supply abroad; every message needs a strict-majority attester quorum plus the issuing bank’s key.', state: ['attesters, attesterCount, threshold', 'issuerAttester per member', 'corridorCap, outstanding (home)', 'supplyCap (abroad)', 'suspense wallets', 'usedNonce'], groups: [
-    ['slow', 'Timelock (admin)', ['setAttester', 'setThreshold', 'setRemote', 'setToken', 'setIssuerAttester', 'setSuspense', 'setCorridorCap', 'setSupplyCap']],
-    ['fast', 'Guardian (pauser)', ['pause', 'unpause', 'lowerCorridorCap', 'lowerSupplyCap', 'disableAttester']],
+  msgH: {path: 'contracts/src/omnibus/crosschain/CrossChainMessenger.sol', what: 'Lock-then-burn messenger. It escrows tokens leaving, burns them once their mint is acknowledged and returns them if the move is cancelled. At home it caps each corridor and counts supply abroad; every receiving chain rate-limits what arrives; every message needs a strict-majority attester quorum plus the issuing bank’s key.', state: ['attesters, attesterCount, threshold', 'issuerAttester per member', 'corridorCap, outstanding, pendingOut (home)', 'supplyCap (abroad)', 'rate limit per source chain and member', 'moves, escrowed, inbound, moveTimeout', 'suspense wallets', 'usedNonce'], groups: [
+    ['slow', 'Timelock (admin)', ['setAttester', 'setThreshold', 'setRemote', 'setToken', 'setIssuerAttester', 'setSuspense', 'setCorridorCap', 'setSupplyCap', 'setRateLimit', 'setMoveTimeout']],
+    ['fast', 'Guardian (pauser)', ['pause', 'unpause', 'lowerCorridorCap', 'lowerSupplyCap', 'lowerRateLimit', 'disableAttester']],
     ['bank', 'Bank registrar', ['sendRevocation (home only)']],
-    ['any', 'Holders and relayers', ['depositForBurn', 'depositForBurnWithHook', 'receiveMessage', 'bounce']]
+    ['any', 'Holders and relayers', ['depositForBurn', 'depositForBurnWithHook', 'receiveMessage', 'cancel']]
   ]},
   msgR: null,
   rtokA: {path: 'contracts/src/omnibus/crosschain/RemoteBankToken.sol', what: 'Bank A’s token on another chain, minted only by the messenger. It keeps the bank’s controls: holder policy, freezes, forced transfer, key recovery, pause.', state: ['balances, frozen, blocked', 'policy (the remote registry)', 'paused'], groups: [
     ['bank', 'Bank A', ['setFrozenTokens, forcedTransfer, recover (compliance)', 'pause, unpause (pauser)', 'setPolicy (admin)']],
-    ['net', 'Messenger', ['messengerMint', 'messengerBurn']],
+    ['net', 'Messenger', ['messengerMint', 'messengerLock', 'messengerBurnLocked', 'messengerUnlock']],
     ['any', 'Admitted holders', ['transfer', 'canTransfer (view)']]
   ]},
   rregA: null,
@@ -453,7 +454,7 @@ var INSP = {
   att: {path: 'off-chain', what: 'The network’s attesters. A strict majority must sign every cross-chain message, and only once its burn is final; the issuing bank’s key must sign too.', state: [], groups: []},
   bankA: {path: 'member bank', what: 'A member bank. It issues and controls its own token: issuer, compliance, pauser and registrar keys, plus a gateway key that answers payments and a separate approver for defunds.', state: [], groups: []},
   bankB: {path: 'member bank', what: 'Another member bank, with the same kinds of keys.', state: [], groups: []},
-  any: {path: 'anyone', what: 'Token holders pay and redeem; relayers deliver messages; anyone can expire lapsed payments, bounce undeliverable messages, migrate balances or complete a replacement once the conditions hold.', state: [], groups: []},
+  any: {path: 'anyone', what: 'Token holders pay and redeem; relayers deliver messages; anyone can expire lapsed payments, cancel moves that cannot mint, migrate balances or complete a replacement once the conditions hold.', state: [], groups: []},
   joint: {path: 'central bank', what: 'One account at the central bank holding every member’s reserves. Its balance moves only on funding, defunds and interest; the ledger’s positions always sum to it.', state: [], groups: []},
   mA: {path: 'central bank', what: 'Bank A’s own reserve account.', state: [], groups: []},
   mB: {path: 'central bank', what: 'Bank B’s own reserve account.', state: [], groups: []}
@@ -474,7 +475,7 @@ var ROLES = [
   ['Bank registrar', 'bank', 'REGISTRAR_ROLE', ['authorize', 'revoke', 'sendRevocation']],
   ['Bank gateway', 'bank', 'member operator key', ['accept', 'reject', 'requestDefund', 'submit', 'setRequiresAcceptance']],
   ['Bank approver', 'bank', 'member approver key', ['approveDefund']],
-  ['Anyone', 'any', 'no role', ['pay', 'redeem', 'expire', 'bounce', 'receiveMessage', 'migrateBalances', 'completeTokenReplacement', 'refund']]
+  ['Anyone', 'any', 'no role', ['pay', 'redeem', 'expire', 'cancel', 'receiveMessage', 'migrateBalances', 'completeTokenReplacement', 'refund']]
 ];
 var SPEED = {slow: 'timelock', fast: 'fast', net: 'service', bank: 'bank', any: 'open'};
 

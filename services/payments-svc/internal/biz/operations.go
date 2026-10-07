@@ -263,7 +263,7 @@ type NetworkUseCase struct{ e *Engine }
 // NewNetworkUseCase creates the use case.
 func NewNetworkUseCase(e *Engine) *NetworkUseCase { return &NetworkUseCase{e: e} }
 
-func tchOps(p Principal) error {
+func operatorOps(p Principal) error {
 	if p.Role != RoleOperatorOps {
 		return ErrForbidden("operator operations only")
 	}
@@ -273,7 +273,7 @@ func tchOps(p Principal) error {
 // View returns members, the Fed joint account against the ledger, cycles and
 // reconciliations.
 func (uc *NetworkUseCase) View(ctx context.Context, p Principal) (*NetworkView, error) {
-	if err := tchOps(p); err != nil {
+	if err := operatorOps(p); err != nil {
 		return nil, err
 	}
 	e := uc.e
@@ -309,7 +309,7 @@ func (uc *NetworkUseCase) View(ctx context.Context, p Principal) (*NetworkView, 
 
 // RunCycle runs a netting cycle now.
 func (uc *NetworkUseCase) RunCycle(ctx context.Context, p Principal) (*NettingCycle, error) {
-	if err := tchOps(p); err != nil {
+	if err := operatorOps(p); err != nil {
 		return nil, err
 	}
 	e := uc.e
@@ -324,7 +324,7 @@ func (uc *NetworkUseCase) RunCycle(ctx context.Context, p Principal) (*NettingCy
 
 // Reconcile attests the Fed's camt.052 balance for the joint account.
 func (uc *NetworkUseCase) Reconcile(ctx context.Context, p Principal) (*Reconciliation, error) {
-	if err := tchOps(p); err != nil {
+	if err := operatorOps(p); err != nil {
 		return nil, err
 	}
 	e := uc.e
@@ -341,7 +341,7 @@ func (uc *NetworkUseCase) Reconcile(ctx context.Context, p Principal) (*Reconcil
 // SetClock moves the scenario clock (and the chain's) forward and runs the
 // background pass. The service layer only exposes it in demo builds.
 func (uc *NetworkUseCase) SetClock(ctx context.Context, p Principal, t time.Time) (time.Time, error) {
-	if err := tchOps(p); err != nil {
+	if err := operatorOps(p); err != nil {
 		return time.Time{}, err
 	}
 	e := uc.e

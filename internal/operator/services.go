@@ -31,7 +31,7 @@ const JointAccount = "FED-TOKEN-JOINT"
 // FundingPurpose is the category purpose members put on funding transfers.
 const FundingPurpose = "TOKEN FUNDING"
 
-// TCHAgent identifies the operator on Fedwire.
+// OperatorAgent identifies the operator on Fedwire.
 var OperatorAgent = iso20022.Agent{BICFI: "OPERUS30", ABA: "098765438"}
 
 type defundReq struct {

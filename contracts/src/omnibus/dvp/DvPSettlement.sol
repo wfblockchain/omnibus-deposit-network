@@ -16,7 +16,7 @@ import { CrossChainMessenger } from "../crosschain/CrossChainMessenger.sol";
  * @title DvPSettlement — delivery versus payment where the asset lives
  * @notice Settles a trade of a tokenized security against a bank's tokenized
  *         deposit on the chain where the security is issued. The cash comes
- *         there from the operator's home chain by burn and mint; the backing never
+ *         there from the operator's home chain by lock, mint and burn; the backing never
  *         leaves the joint account at the Fed. Each trade settles gross and
  *         both legs move in one transaction: DvP model 1 in the CPMI-IOSCO
  *         sense.
@@ -68,8 +68,8 @@ import { CrossChainMessenger } from "../crosschain/CrossChainMessenger.sol";
  *      FINALITY. The contract settles in one transaction; when that becomes
  *      final is the chain's property and the rulebook's decision (on Ethereum,
  *      the finalized block containing Settled). Attesters sign a cash message
- *      only once its burn is final at home, so cash never arrives here on a
- *      burn that could still be reorganised away.
+ *      only once its lock is final at home, so cash never arrives here on a
+ *      lock that could still be reorganised away.
  *
  *      AMOUNTS ARE EXACT. Terms state both amounts in each token's own units:
  *      no price, no rounding. A leg whose recipient does not receive exactly
@@ -307,7 +307,7 @@ contract DvPSettlement is AccessControlDefaultAdminRules, Pausable, ReentrancyGu
     /// @notice Delivers an attested cross-chain message whose tokens mint to
     ///         this contract, and applies its instruction: fund the named
     ///         trade's cash leg and try to settle, or credit the beneficiary.
-    /// @dev Never reverts for a business reason, so a burned-at-home message
+    /// @dev Never reverts for a business reason, so a locked-at-home message
     ///      is always deliverable. Works while paused (as a credit).
     function receiveCash(bytes calldata message, bytes[] calldata signatures, bytes calldata issuerSignature)
         external
@@ -376,7 +376,7 @@ contract DvPSettlement is AccessControlDefaultAdminRules, Pausable, ReentrancyGu
         credit[token][msg.sender] = 0;
         credited[token] -= a;
         // If home cannot deliver (the recipient is not admitted there), the
-        // bounce returns the amount to the caller on this chain, not to the venue.
+        // cancellation returns the amount to the caller on this chain, not to the venue.
         uint64 nonce =
             MESSENGER.depositForBurnWithHook(memberId, a, MESSENGER.HOME_DOMAIN(), homeRecipient, address(0), "", msg.sender);
         emit CreditSentHome(msg.sender, token, a, homeRecipient, nonce);

@@ -8,8 +8,8 @@ Contracts: `contracts/src/omnibus/dvp/DvPSettlement.sol`,
 `contracts/src/omnibus/crosschain/CrossChainMessenger.sol`,
 `contracts/src/omnibus/crosschain/RemoteBankToken.sol`.
 Tests: `contracts/test/omnibus/DvP.t.sol` (21 scenarios),
-`DvPInvariants.t.sol` (3 fuzzed invariants), `CrossChain.t.sol` (33, including
-bounces, revocations and thresholds). Governance, emergency controls,
+`DvPInvariants.t.sol` (3 fuzzed invariants), `CrossChain.t.sol` (46, including
+cancellations, rate limits, revocations and thresholds). Governance, emergency controls,
 deployment and token replacement are in
 [contract-operations.md](contract-operations.md).
 
@@ -85,8 +85,8 @@ Here the message names `destinationCaller`, and `receiveCash` delivers it and
 reads the instruction from what the messenger returns, in one transaction.
 
 **Arrival never reverts for a business reason.** A reverted delivery can
-never be retried into success if its trade has lapsed, and the burn at home
-is already done. So cash for an unknown, closed, already-funded or lapsed
+never be retried into success if its trade has lapsed, and the cash is
+already locked at home. So cash for an unknown, closed, already-funded or lapsed
 trade, a wrong amount, a malformed instruction or a paused venue is credited
 to the beneficiary, who withdraws it or sends it home with
 `withdrawCreditHome`.
@@ -119,7 +119,7 @@ policy on both sides, partial freeze, forced transfer, key recovery that blocks
 the lost key, ERC-7943 through ERC-165. Before, a regulator's freeze order
 could not be executed on the public chain.
 
-**CrossChainMessenger** (message version 3):
+**CrossChainMessenger** (message version 4):
 
 - *Corridor caps.* Home tracks each member's `outstanding` supply per chain
   and refuses transfers above `corridorCap` (closed until governance opens it).
@@ -139,14 +139,18 @@ could not be executed on the public chain.
   admin over is two-step and delayed. The remote token's admin, which can
   replace the holder policy, has the same two-step delay.
 - *Destination caller and hook data*, as in CCTP V2.
-- *Undeliverable transfers come back:* anyone bounces them with the original
-  attestations and a RETURN re-mints at the source, to `returnTo`, or to the
-  bank's suspense wallet if nobody can hold it. `withdrawCreditHome` names the
-  credit owner as `returnTo`, so a bounced send-home returns to them, not to the
-  venue.
+- *Lock, mint, then burn:* the source escrows the cash and burns it only on
+  the destination's attested MINT_ACK. A move that cannot mint is cancelled on
+  the destination (after its deadline, or at once for a recipient who cannot
+  hold the token) and the MINT_CANCEL returns the escrow to `returnTo`, or to
+  the bank's suspense wallet if nobody can hold it. `withdrawCreditHome` names
+  the credit owner as `returnTo`, so a cancelled send-home returns to them, not
+  to the venue.
+- *Inbound rate limit* on every receiving chain, per source chain and member;
+  closed until governance opens it.
 - *Revocations follow the token:* a bank's registrar at home broadcasts a
   revocation that applies on arrival; admissions stay local.
-- *Pause* on sending and delivery; burned tokens stay counted abroad, so a
+- *Pause* on sending and delivery; escrowed tokens stay in home supply, so a
   pause never leaves tokens under-backed.
 
 ## ISO 20022 mapping
